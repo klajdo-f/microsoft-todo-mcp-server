@@ -67,7 +67,10 @@ export async function startServer(_config?: ServerConfig): Promise<void> {
 
     logger.info("Server started and listening", { source: "server" })
   } catch (error) {
-    logger.error("Error starting server:", { source: "server", error: error instanceof Error ? error.message : String(error) })
+    logger.error("Error starting server:", {
+      source: "server",
+      error: error instanceof Error ? error.message : String(error),
+    })
     throw error
   }
 }

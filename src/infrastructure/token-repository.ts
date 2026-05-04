@@ -62,7 +62,10 @@ export class TokenRepository {
           return this.currentTokens
         }
       } catch (error) {
-        logger.error("Error reading token file:", { source: "token-repository", error: error instanceof Error ? error.message : String(error) })
+        logger.error("Error reading token file:", {
+          source: "token-repository",
+          error: error instanceof Error ? error.message : String(error),
+        })
       }
     }
 
@@ -78,7 +81,10 @@ export class TokenRepository {
 
         return tokens
       } catch (error) {
-        logger.error("Error reading legacy token file:", { source: "token-repository", error: error instanceof Error ? error.message : String(error) })
+        logger.error("Error reading legacy token file:", {
+          source: "token-repository",
+          error: error instanceof Error ? error.message : String(error),
+        })
       }
     }
 
@@ -168,7 +174,10 @@ export class TokenRepository {
       try {
         writeFileSync(this.tokenFilePath, JSON.stringify(this.currentTokens, null, 2), "utf8")
       } catch (writeError) {
-        logger.error("Failed to persist refresh error:", { source: "token-repository", error: writeError instanceof Error ? writeError.message : String(writeError) })
+        logger.error("Failed to persist refresh error:", {
+          source: "token-repository",
+          error: writeError instanceof Error ? writeError.message : String(writeError),
+        })
       }
     }
   }

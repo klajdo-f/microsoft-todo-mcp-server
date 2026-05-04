@@ -92,21 +92,16 @@ export function registerDebugTools(server: McpServer): void {
         for (const task of tasksToArchive) {
           try {
             // Create task in target list
-            await makeGraphRequest(
-              `${MS_GRAPH_BASE}/me/todo/lists/${targetListId}/tasks`,
-              token,
-              "POST",
-              {
-                title: task.title,
-                status: "completed",
-                body: task.body,
-                importance: task.importance,
-                completedDateTime: task.completedDateTime,
-                dueDateTime: task.dueDateTime,
-                reminderDateTime: task.reminderDateTime,
-                categories: task.categories,
-              },
-            )
+            await makeGraphRequest(`${MS_GRAPH_BASE}/me/todo/lists/${targetListId}/tasks`, token, "POST", {
+              title: task.title,
+              status: "completed",
+              body: task.body,
+              importance: task.importance,
+              completedDateTime: task.completedDateTime,
+              dueDateTime: task.dueDateTime,
+              reminderDateTime: task.reminderDateTime,
+              categories: task.categories,
+            })
 
             // Delete from source list
             await makeGraphRequest(`${MS_GRAPH_BASE}/me/todo/lists/${sourceListId}/tasks/${task.id}`, token, "DELETE")

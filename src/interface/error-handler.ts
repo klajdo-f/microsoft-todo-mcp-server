@@ -48,7 +48,8 @@ export function handleToolError(error: unknown): ToolErrorResponse {
       content: [
         {
           type: "text",
-          text: `[MAILBOX_NOT_ENABLED] ${error.message}\n\n` +
+          text:
+            `[MAILBOX_NOT_ENABLED] ${error.message}\n\n` +
             `This error typically occurs with personal Microsoft accounts (Outlook.com, Hotmail, etc.). ` +
             `The Microsoft To Do API is only available for Microsoft 365 work/school accounts. ` +
             `Please use a work or school account instead.`,
@@ -62,7 +63,8 @@ export function handleToolError(error: unknown): ToolErrorResponse {
       content: [
         {
           type: "text",
-          text: `[PERMISSION_DENIED] ${error.message}\n\n` +
+          text:
+            `[PERMISSION_DENIED] ${error.message}\n\n` +
             `Your account lacks the required Microsoft Graph permissions. ` +
             `An administrator may need to grant consent for the Tasks.ReadWrite scope.`,
         },
@@ -74,9 +76,7 @@ export function handleToolError(error: unknown): ToolErrorResponse {
     let text = `[GRAPH_API_ERROR] ${error.message} (HTTP ${error.status})`
     if (error.responseBody) {
       // Surface a truncated excerpt of the Graph API error body
-      const excerpt = error.responseBody.length > 300
-        ? error.responseBody.substring(0, 300) + "…"
-        : error.responseBody
+      const excerpt = error.responseBody.length > 300 ? error.responseBody.substring(0, 300) + "…" : error.responseBody
       text += `\n\nResponse: ${excerpt}`
     }
     return { content: [{ type: "text", text }] }
@@ -87,7 +87,8 @@ export function handleToolError(error: unknown): ToolErrorResponse {
       content: [
         {
           type: "text",
-          text: `[NETWORK_ERROR] ${error.message}\n\n` +
+          text:
+            `[NETWORK_ERROR] ${error.message}\n\n` +
             `Could not reach the Microsoft Graph API. Check your internet connection and try again.`,
         },
       ],

@@ -61,7 +61,10 @@ async function isPersonalMicrosoftAccount(): Promise<boolean> {
 
     return false
   } catch (error) {
-    logger.error("Error checking account type", { source: "auth-tools", error: error instanceof Error ? error.message : String(error) })
+    logger.error("Error checking account type", {
+      source: "auth-tools",
+      error: error instanceof Error ? error.message : String(error),
+    })
     return false
   }
 }
@@ -160,7 +163,10 @@ export function registerAuthTools(server: McpServer): void {
             }
           })
           .catch((err: unknown) => {
-            logger.error("[start-auth] Auth flow error", { source: "auth-tools", error: err instanceof Error ? err.message : String(err) })
+            logger.error("[start-auth] Auth flow error", {
+              source: "auth-tools",
+              error: err instanceof Error ? err.message : String(err),
+            })
           })
 
         // Open the default browser automatically

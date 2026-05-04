@@ -31,7 +31,10 @@ export async function runCli(): Promise<void> {
 // Only run when executed directly (not when imported by tests)
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   runCli().catch((error) => {
-    logger.error("Fatal error starting server", { source: "cli", error: error instanceof Error ? error.message : String(error) })
+    logger.error("Fatal error starting server", {
+      source: "cli",
+      error: error instanceof Error ? error.message : String(error),
+    })
     process.exit(1)
   })
 }

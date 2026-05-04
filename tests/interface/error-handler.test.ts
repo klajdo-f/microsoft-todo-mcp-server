@@ -41,9 +41,7 @@ describe("handleToolError", () => {
   })
 
   it("formats GraphApiError with HTTP status and response excerpt", () => {
-    const result = handleToolError(
-      new GraphApiError("Bad request", 400, '{"error":{"message":"invalid filter"}}'),
-    )
+    const result = handleToolError(new GraphApiError("Bad request", 400, '{"error":{"message":"invalid filter"}}'))
     const text = result.content[0].text
 
     expect(text).toContain("[GRAPH_API_ERROR]")

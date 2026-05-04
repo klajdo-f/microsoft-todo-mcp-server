@@ -51,10 +51,7 @@ export class McpError extends Error {
  * Code: `AUTH_ERROR`
  */
 export class AuthError extends McpError {
-  constructor(
-    message: string,
-    context?: Record<string, unknown>,
-  ) {
+  constructor(message: string, context?: Record<string, unknown>) {
     super(message, "AUTH_ERROR", context)
     this.name = "AuthError"
   }
@@ -75,12 +72,7 @@ export class GraphApiError extends McpError {
   /** Raw response body from the Graph API (may contain OData error details). */
   public readonly responseBody?: string
 
-  constructor(
-    message: string,
-    status: number,
-    responseBody?: string,
-    context?: Record<string, unknown>,
-  ) {
+  constructor(message: string, status: number, responseBody?: string, context?: Record<string, unknown>) {
     super(message, "GRAPH_API_ERROR", { ...context, status })
     this.name = "GraphApiError"
     this.status = status
@@ -95,10 +87,7 @@ export class GraphApiError extends McpError {
  * Code: `PERMISSION_DENIED`
  */
 export class PermissionDeniedError extends McpError {
-  constructor(
-    message: string,
-    context?: Record<string, unknown>,
-  ) {
+  constructor(message: string, context?: Record<string, unknown>) {
     super(message, "PERMISSION_DENIED", context)
     this.name = "PermissionDeniedError"
   }
@@ -112,10 +101,7 @@ export class PermissionDeniedError extends McpError {
  * Code: `MAILBOX_NOT_ENABLED`
  */
 export class MailboxNotEnabledError extends McpError {
-  constructor(
-    message: string,
-    context?: Record<string, unknown>,
-  ) {
+  constructor(message: string, context?: Record<string, unknown>) {
     super(message, "MAILBOX_NOT_ENABLED", context)
     this.name = "MailboxNotEnabledError"
   }
@@ -129,11 +115,7 @@ export class MailboxNotEnabledError extends McpError {
  * Code: `NETWORK_ERROR`
  */
 export class NetworkError extends McpError {
-  constructor(
-    message: string,
-    cause?: Error,
-    context?: Record<string, unknown>,
-  ) {
+  constructor(message: string, cause?: Error, context?: Record<string, unknown>) {
     super(message, "NETWORK_ERROR", {
       ...context,
       ...(cause ? { cause: cause.message } : {}),
@@ -149,10 +131,7 @@ export class NetworkError extends McpError {
  * Code: `VALIDATION_ERROR`
  */
 export class ValidationError extends McpError {
-  constructor(
-    message: string,
-    context?: Record<string, unknown>,
-  ) {
+  constructor(message: string, context?: Record<string, unknown>) {
     super(message, "VALIDATION_ERROR", context)
     this.name = "ValidationError"
   }

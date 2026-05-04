@@ -85,11 +85,17 @@ export async function makeGraphRequest<T>(
 
     if (!response.ok) {
       const errorText = await response.text()
-      logger.warn(`HTTP error! status: ${response.status}, body: ${errorText}`, { source: "graph-client", status: response.status })
+      logger.warn(`HTTP error! status: ${response.status}, body: ${errorText}`, {
+        source: "graph-client",
+        status: response.status,
+      })
 
       // Check for the specific MailboxNotEnabledForRESTAPI error
       if (errorText.includes("MailboxNotEnabledForRESTAPI")) {
-        logger.warn(`MailboxNotEnabledForRESTAPI detected for personal account`, { source: "graph-client", status: response.status })
+        logger.warn(`MailboxNotEnabledForRESTAPI detected for personal account`, {
+          source: "graph-client",
+          status: response.status,
+        })
         throw new MailboxNotEnabledError(
           "Microsoft To Do API is not available for personal Microsoft accounts. " +
             "Only Microsoft 365 business accounts have API access.",
@@ -136,7 +142,10 @@ export async function makeGraphRequest<T>(
     }
 
     // Wrap unexpected failures as NetworkError
-    logger.error("Network/transport error in Graph API request:", { source: "graph-client", error: error instanceof Error ? error.message : String(error) })
+    logger.error("Network/transport error in Graph API request:", {
+      source: "graph-client",
+      error: error instanceof Error ? error.message : String(error),
+    })
     throw new NetworkError(
       `Network error during Graph API request: ${error instanceof Error ? error.message : String(error)}`,
       error instanceof Error ? error : undefined,
