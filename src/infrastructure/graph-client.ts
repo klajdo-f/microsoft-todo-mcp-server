@@ -1,17 +1,27 @@
 /**
  * Graph API client — infrastructure-layer HTTP communication with Microsoft Graph.
  *
- * Provides `makeGraphRequest` (null-on-error with automatic 401 retry) and
- * `getAccessToken` (delegates to the token repository).  This module is the
- * canonical implementation; `src/graph-client.ts` re-exports it as a
- * backward-compatible wrapper.
+ * Provides `makeGraphRequest` (typed exceptions on failure, automatic 401 retry)
+ * and `getAccessToken` (delegates to the token repository).
  *
- * Failure-mode contract (per task plan):
- *   - fetch throws → return null; persist error metadata
- *   - timeout / network error → return null
- *   - malformed response → return null after response.text() / response.json() fails
+ * Failure-mode contract:
+ *   - Authentication failure (missing tokens, refresh failure) → `AuthError`
+ *   - 401 after retry → `AuthError`
+ *   - 403 → `PermissionDeniedError`
+ *   - MailboxNotEnabledForRESTAPI → `MailboxNotEnabledError`
+ *   - Other non-ok HTTP → `GraphApiError` (carries status + body)
+ *   - Network / fetch failure → `NetworkError`
+ *   - 204 No Content → returns `null` (no JSON parsing attempted)
  */
 import { tokenManager } from "../token-manager.js"
+import {
+  AuthError,
+  GraphApiError,
+  MailboxNotEnabledError,
+  McpError,
+  NetworkError,
+  PermissionDeniedError,
+} from "../domain/errors.js"
 
 // Microsoft Graph API endpoints
 export const MS_GRAPH_BASE = "https://graph.microsoft.com/v1.0"
@@ -21,8 +31,8 @@ export const USER_AGENT = "microsoft-todo-mcp-server/1.0"
  * Make an authenticated request to the Microsoft Graph API.
  *
  * On 401, automatically attempts a token refresh via `getAccessToken()`
- * and retries once with the new token.  Returns null on any error
- * (network, HTTP, parse) — callers handle the null case.
+ * and retries once with the new token.  Throws typed domain exceptions
+ * on failure; returns `null` for 204 No Content responses.
  */
 export async function makeGraphRequest<T>(
   url: string,
@@ -63,8 +73,8 @@ export async function makeGraphRequest<T>(
     // If we get a 401, try to refresh the token and retry once
     if (response.status === 401) {
       console.error("Got 401, attempting token refresh...")
-      const newToken = await getAccessToken() // This will trigger refresh
-      if (newToken && newToken !== token) {
+      const newToken = await getAccessToken()
+      if (newToken !== token) {
         // Retry with new token
         headers.Authorization = `Bearer ${newToken}`
         response = await fetch(url, { ...options, headers })
@@ -77,59 +87,92 @@ export async function makeGraphRequest<T>(
 
       // Check for the specific MailboxNotEnabledForRESTAPI error
       if (errorText.includes("MailboxNotEnabledForRESTAPI")) {
-        console.error(`
-=================================================================
-ERROR: MailboxNotEnabledForRESTAPI
-
-The Microsoft To Do API is not available for personal Microsoft accounts 
-(outlook.com, hotmail.com, live.com, etc.) through the Graph API.
-
-This is a limitation of the Microsoft Graph API, not an authentication issue.
-Microsoft only allows To Do API access for Microsoft 365 business accounts.
-
-You can still use Microsoft To Do through the web interface or mobile apps,
-but API access is restricted for personal accounts.
-=================================================================
-        `)
-
-        throw new Error(
-          "Microsoft To Do API is not available for personal Microsoft accounts. See console for details.",
+        console.error(`MailboxNotEnabledForRESTAPI detected for personal account`)
+        throw new MailboxNotEnabledError(
+          "Microsoft To Do API is not available for personal Microsoft accounts. " +
+            "Only Microsoft 365 business accounts have API access.",
+          { status: response.status },
         )
       }
 
-      throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`)
+      // Map HTTP status to typed exceptions
+      if (response.status === 401) {
+        throw new AuthError("Authentication failed after token refresh. Please re-authenticate.", {
+          status: response.status,
+        })
+      }
+
+      if (response.status === 403) {
+        throw new PermissionDeniedError(
+          "Insufficient permissions for this operation. Check required scopes.",
+          { status: response.status, body: errorText },
+        )
+      }
+
+      throw new GraphApiError(
+        `Graph API error: ${response.status}`,
+        response.status,
+        errorText,
+      )
     }
 
-    const data = await response.json()
+    // Guard: 204 No Content or empty body — skip JSON parsing
+    if (response.status === 204) {
+      console.error("Received 204 No Content — returning null")
+      return null as T
+    }
+
+    const text = await response.text()
+    if (!text || text.trim().length === 0) {
+      console.error("Empty response body — returning null")
+      return null as T
+    }
+
+    const data = JSON.parse(text)
     console.error(`Response received: ${JSON.stringify(data).substring(0, 200)}...`)
     return data as T
   } catch (error) {
-    console.error("Error making Graph API request:", error)
-    return null
+    // Rethrow already-typed domain exceptions
+    if (error instanceof McpError) {
+      throw error
+    }
+
+    // Wrap unexpected failures as NetworkError
+    console.error("Network/transport error in Graph API request:", error)
+    throw new NetworkError(
+      `Network error during Graph API request: ${error instanceof Error ? error.message : String(error)}`,
+      error instanceof Error ? error : undefined,
+    )
   }
 }
 
 /**
  * Authentication helper — delegates to the token manager for token retrieval.
  *
- * Returns null when no valid tokens are available (user should run start-auth).
+ * Throws `AuthError` when no valid tokens are available or when the token
+ * manager itself fails.  Callers should catch `AuthError` to prompt
+ * re-authentication.
  */
-export async function getAccessToken(): Promise<string | null> {
-  try {
-    console.error("getAccessToken called")
+export async function getAccessToken(): Promise<string> {
+  console.error("getAccessToken called")
 
-    // Use the token manager to get tokens (handles all sources and refresh)
+  try {
     const tokens = await tokenManager.getTokens()
 
     if (tokens) {
-      console.error(`Successfully retrieved valid token`)
+      console.error("Successfully retrieved valid token")
       return tokens.accessToken
     }
 
-    console.error("No valid tokens available — user should run start-auth tool")
-    return null
+    throw new AuthError("No valid tokens available. Please authenticate using the start-auth tool.")
   } catch (error) {
-    console.error("Error getting access token:", error)
-    return null
+    // Rethrow already-typed AuthError
+    if (error instanceof AuthError) {
+      throw error
+    }
+
+    throw new AuthError(
+      `Failed to retrieve access token: ${error instanceof Error ? error.message : String(error)}`,
+    )
   }
 }
