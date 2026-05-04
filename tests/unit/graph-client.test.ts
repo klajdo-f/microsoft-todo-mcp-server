@@ -157,10 +157,7 @@ describe("graph-client", () => {
 
   describe("makeGraphRequest — typed exceptions", () => {
     it("throws AuthError on 401 after retry with new token still returning 401", async () => {
-      mockFetchSequence([
-        makeTextResponse("Unauthorized", 401),
-        makeTextResponse("Unauthorized", 401),
-      ])
+      mockFetchSequence([makeTextResponse("Unauthorized", 401), makeTextResponse("Unauthorized", 401)])
       mockGetTokens.mockResolvedValue({
         accessToken: "new-token",
         refreshToken: "rt-456",
@@ -168,20 +165,14 @@ describe("graph-client", () => {
       })
 
       await expect(
-        makeGraphRequest<{ id: string }>(
-          "https://graph.microsoft.com/v1.0/me/todo/lists",
-          "old-token",
-        ),
+        makeGraphRequest<{ id: string }>("https://graph.microsoft.com/v1.0/me/todo/lists", "old-token"),
       ).rejects.toThrow(AuthError)
 
       expect(fetch).toHaveBeenCalledTimes(2)
     })
 
     it("throws AuthError with AUTH_ERROR code on double 401", async () => {
-      mockFetchSequence([
-        makeTextResponse("Unauthorized", 401),
-        makeTextResponse("Unauthorized", 401),
-      ])
+      mockFetchSequence([makeTextResponse("Unauthorized", 401), makeTextResponse("Unauthorized", 401)])
       mockGetTokens.mockResolvedValue({
         accessToken: "new-token",
         refreshToken: "rt-456",
@@ -189,10 +180,7 @@ describe("graph-client", () => {
       })
 
       try {
-        await makeGraphRequest<{ id: string }>(
-          "https://graph.microsoft.com/v1.0/me/todo/lists",
-          "old-token",
-        )
+        await makeGraphRequest<{ id: string }>("https://graph.microsoft.com/v1.0/me/todo/lists", "old-token")
         expect.unreachable("Should have thrown")
       } catch (error) {
         expect(error).toBeInstanceOf(AuthError)
@@ -206,10 +194,7 @@ describe("graph-client", () => {
       mockGetTokens.mockRejectedValue(new Error("Token refresh failed"))
 
       await expect(
-        makeGraphRequest<{ id: string }>(
-          "https://graph.microsoft.com/v1.0/me/todo/lists",
-          "old-token",
-        ),
+        makeGraphRequest<{ id: string }>("https://graph.microsoft.com/v1.0/me/todo/lists", "old-token"),
       ).rejects.toThrow(AuthError)
     })
 
@@ -222,25 +207,17 @@ describe("graph-client", () => {
       })
 
       await expect(
-        makeGraphRequest<{ id: string }>(
-          "https://graph.microsoft.com/v1.0/me/todo/lists",
-          "same-token",
-        ),
+        makeGraphRequest<{ id: string }>("https://graph.microsoft.com/v1.0/me/todo/lists", "same-token"),
       ).rejects.toThrow(AuthError)
 
       expect(fetch).toHaveBeenCalledTimes(1)
     })
 
     it("throws PermissionDeniedError on 403", async () => {
-      mockFetchSequence([
-        makeTextResponse('{"error":{"code":"ErrorAccessDenied","message":"Access is denied."}}', 403),
-      ])
+      mockFetchSequence([makeTextResponse('{"error":{"code":"ErrorAccessDenied","message":"Access is denied."}}', 403)])
 
       try {
-        await makeGraphRequest<{ id: string }>(
-          "https://graph.microsoft.com/v1.0/me/todo/lists",
-          "at-123",
-        )
+        await makeGraphRequest<{ id: string }>("https://graph.microsoft.com/v1.0/me/todo/lists", "at-123")
         expect.unreachable("Should have thrown")
       } catch (error) {
         expect(error).toBeInstanceOf(PermissionDeniedError)
@@ -253,10 +230,7 @@ describe("graph-client", () => {
       mockFetchSequence([makeTextResponse("Internal Server Error", 500)])
 
       try {
-        await makeGraphRequest<{ id: string }>(
-          "https://graph.microsoft.com/v1.0/me/todo/lists",
-          "at-123",
-        )
+        await makeGraphRequest<{ id: string }>("https://graph.microsoft.com/v1.0/me/todo/lists", "at-123")
         expect.unreachable("Should have thrown")
       } catch (error) {
         expect(error).toBeInstanceOf(GraphApiError)
@@ -269,17 +243,11 @@ describe("graph-client", () => {
 
     it("throws MailboxNotEnabledError when body contains MailboxNotEnabledForRESTAPI", async () => {
       mockFetchSequence([
-        makeTextResponse(
-          '{"error":{"code":"ErrorInternalOperation","message":"MailboxNotEnabledForRESTAPI"}}',
-          404,
-        ),
+        makeTextResponse('{"error":{"code":"ErrorInternalOperation","message":"MailboxNotEnabledForRESTAPI"}}', 404),
       ])
 
       try {
-        await makeGraphRequest<{ id: string }>(
-          "https://graph.microsoft.com/v1.0/me/todo/lists",
-          "at-123",
-        )
+        await makeGraphRequest<{ id: string }>("https://graph.microsoft.com/v1.0/me/todo/lists", "at-123")
         expect.unreachable("Should have thrown")
       } catch (error) {
         expect(error).toBeInstanceOf(MailboxNotEnabledError)
@@ -289,16 +257,10 @@ describe("graph-client", () => {
     })
 
     it("throws NetworkError when fetch rejects (DNS, timeout, etc.)", async () => {
-      vi.stubGlobal(
-        "fetch",
-        vi.fn().mockRejectedValue(new Error("ECONNREFUSED")),
-      )
+      vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")))
 
       try {
-        await makeGraphRequest<{ id: string }>(
-          "https://graph.microsoft.com/v1.0/me/todo/lists",
-          "at-123",
-        )
+        await makeGraphRequest<{ id: string }>("https://graph.microsoft.com/v1.0/me/todo/lists", "at-123")
         expect.unreachable("Should have thrown")
       } catch (error) {
         expect(error).toBeInstanceOf(NetworkError)
@@ -336,10 +298,7 @@ describe("graph-client", () => {
 
       // The outer catch should rethrow the McpError as-is, not wrap it
       try {
-        await makeGraphRequest<{ id: string }>(
-          "https://graph.microsoft.com/v1.0/me/todo/lists",
-          "at-123",
-        )
+        await makeGraphRequest<{ id: string }>("https://graph.microsoft.com/v1.0/me/todo/lists", "at-123")
         expect.unreachable("Should have thrown")
       } catch (error) {
         expect(error).toBe(graphError) // same reference, not wrapped

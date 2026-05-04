@@ -2,13 +2,16 @@
  * Application service for Microsoft To Do task operations.
  *
  * Provides use-case methods that encapsulate Graph API calls for
- * task CRUD within a task list.  Each method returns domain objects
- * or null on error — callers decide how to present results.
+ * task CRUD within a task list.  Methods throw domain exceptions
+ * on failure — callers catch at the boundary and format MCP responses.
  *
- * Failure-mode contract: returns null when makeGraphRequest fails,
- * matching the existing null-on-error behaviour from todo-index.ts.
+ * @throws {AuthError} when authentication fails.
+ * @throws {GraphApiError} when the Graph API returns a non-success response.
+ * @throws {NetworkError} when a network-level failure occurs.
+ * @throws {ValidationError} when the update payload is empty.
  */
 import { makeGraphRequest, getAccessToken, MS_GRAPH_BASE } from "../infrastructure/graph-client.js"
+import { ValidationError } from "../domain/errors.js"
 import type { Task } from "../domain/entities.js"
 
 /** Options for filtering, sorting, and paginating task queries. */
@@ -46,9 +49,8 @@ export interface GetTasksResponse {
  * Builds OData query parameters from the options and returns the
  * task array plus optional total count.
  */
-export async function getTasks(listId: string, options?: GetTasksOptions): Promise<GetTasksResponse | null> {
+export async function getTasks(listId: string, options?: GetTasksOptions): Promise<GetTasksResponse> {
   const token = await getAccessToken()
-  if (!token) return null
 
   // Build the query parameters
   const queryParams = new URLSearchParams()
@@ -64,11 +66,10 @@ export async function getTasks(listId: string, options?: GetTasksOptions): Promi
   const url = `${MS_GRAPH_BASE}/me/todo/lists/${listId}/tasks${queryString ? "?" + queryString : ""}`
 
   const response = await makeGraphRequest<{ value: Task[]; "@odata.count"?: number }>(url, token)
-  if (!response) return null
 
   return {
-    tasks: response.value || [],
-    odataCount: response["@odata.count"],
+    tasks: response!.value || [],
+    odataCount: response!["@odata.count"],
   }
 }
 
@@ -78,9 +79,8 @@ export async function getTasks(listId: string, options?: GetTasksOptions): Promi
  * Constructs the request body from the provided fields, mapping
  * simple string dates to the Graph API's { dateTime, timeZone } shape.
  */
-export async function createTask(listId: string, fields: TaskFields): Promise<Task | null> {
+export async function createTask(listId: string, fields: TaskFields): Promise<Task> {
   const token = await getAccessToken()
-  if (!token) return null
 
   const taskBody: Record<string, unknown> = {}
 
@@ -120,13 +120,7 @@ export async function createTask(listId: string, fields: TaskFields): Promise<Ta
     taskBody.categories = fields.categories
   }
 
-  const response = await makeGraphRequest<Task>(
-    `${MS_GRAPH_BASE}/me/todo/lists/${listId}/tasks`,
-    token,
-    "POST",
-    taskBody,
-  )
-  return response
+  return (await makeGraphRequest<Task>(`${MS_GRAPH_BASE}/me/todo/lists/${listId}/tasks`, token, "POST", taskBody))!
 }
 
 /**
@@ -134,10 +128,11 @@ export async function createTask(listId: string, fields: TaskFields): Promise<Ta
  *
  * Constructs the update body from provided fields. Empty-string date
  * values are treated as "clear this field" by setting it to null.
+ *
+ * @throws {ValidationError} when no fields are provided for the update.
  */
-export async function updateTask(listId: string, taskId: string, fields: TaskFields): Promise<Task | null> {
+export async function updateTask(listId: string, taskId: string, fields: TaskFields): Promise<Task> {
   const token = await getAccessToken()
-  if (!token) return null
 
   const taskBody: Record<string, unknown> = {}
 
@@ -179,27 +174,24 @@ export async function updateTask(listId: string, taskId: string, fields: TaskFie
   }
 
   if (Object.keys(taskBody).length === 0) {
-    // Nothing to update — return a sentinel to let the caller know
-    return null
+    throw new ValidationError("No fields provided for task update. At least one field must be specified.")
   }
 
-  const response = await makeGraphRequest<Task>(
+  return (await makeGraphRequest<Task>(
     `${MS_GRAPH_BASE}/me/todo/lists/${listId}/tasks/${taskId}`,
     token,
     "PATCH",
     taskBody,
-  )
-  return response
+  ))!
 }
 
 /**
  * Delete a task from a task list.
  *
- * Returns true on success, null on auth failure.
+ * Returns true on success.
  */
-export async function deleteTask(listId: string, taskId: string): Promise<boolean | null> {
+export async function deleteTask(listId: string, taskId: string): Promise<boolean> {
   const token = await getAccessToken()
-  if (!token) return null
 
   await makeGraphRequest<null>(`${MS_GRAPH_BASE}/me/todo/lists/${listId}/tasks/${taskId}`, token, "DELETE")
   return true

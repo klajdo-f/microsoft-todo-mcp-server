@@ -2,13 +2,16 @@
  * Application service for Microsoft To Do checklist-item operations.
  *
  * Provides use-case methods that encapsulate Graph API calls for
- * checklist-item CRUD within a task.  Each method returns domain
- * objects or null on error — callers decide how to present results.
+ * checklist-item CRUD within a task.  Methods throw domain exceptions
+ * on failure — callers catch at the boundary and format MCP responses.
  *
- * Failure-mode contract: returns null when makeGraphRequest fails,
- * matching the existing null-on-error behaviour from todo-index.ts.
+ * @throws {AuthError} when authentication fails.
+ * @throws {GraphApiError} when the Graph API returns a non-success response.
+ * @throws {NetworkError} when a network-level failure occurs.
+ * @throws {ValidationError} when the update payload is empty.
  */
 import { makeGraphRequest, getAccessToken, MS_GRAPH_BASE } from "../infrastructure/graph-client.js"
+import { ValidationError } from "../domain/errors.js"
 import type { Task, ChecklistItem } from "../domain/entities.js"
 
 /** Fields for updating a checklist item. */
@@ -26,24 +29,22 @@ export interface ChecklistItemFields {
 export async function getChecklistItems(
   listId: string,
   taskId: string,
-): Promise<{ taskTitle: string; items: ChecklistItem[] } | null> {
+): Promise<{ taskTitle: string; items: ChecklistItem[] }> {
   const token = await getAccessToken()
-  if (!token) return null
 
-  // Fetch the task to get its title
+  // Fetch the task to get its title — errors propagate as domain exceptions
   const taskResponse = await makeGraphRequest<Task>(`${MS_GRAPH_BASE}/me/todo/lists/${listId}/tasks/${taskId}`, token)
-  const taskTitle = taskResponse ? taskResponse.title : "Unknown Task"
+  const taskTitle = taskResponse!.title
 
   // Fetch the checklist items
   const response = await makeGraphRequest<{ value: ChecklistItem[] }>(
     `${MS_GRAPH_BASE}/me/todo/lists/${listId}/tasks/${taskId}/checklistItems`,
     token,
   )
-  if (!response) return null
 
   return {
     taskTitle,
-    items: response.value || [],
+    items: response!.value || [],
   }
 }
 
@@ -53,9 +54,8 @@ export async function createChecklistItem(
   taskId: string,
   displayName: string,
   isChecked?: boolean,
-): Promise<ChecklistItem | null> {
+): Promise<ChecklistItem> {
   const token = await getAccessToken()
-  if (!token) return null
 
   const requestBody: Record<string, unknown> = { displayName }
 
@@ -63,24 +63,26 @@ export async function createChecklistItem(
     requestBody.isChecked = isChecked
   }
 
-  const response = await makeGraphRequest<ChecklistItem>(
+  return (await makeGraphRequest<ChecklistItem>(
     `${MS_GRAPH_BASE}/me/todo/lists/${listId}/tasks/${taskId}/checklistItems`,
     token,
     "POST",
     requestBody,
-  )
-  return response
+  ))!
 }
 
-/** Update an existing checklist item. */
+/**
+ * Update an existing checklist item.
+ *
+ * @throws {ValidationError} when no fields are provided for the update.
+ */
 export async function updateChecklistItem(
   listId: string,
   taskId: string,
   checklistItemId: string,
   fields: ChecklistItemFields,
-): Promise<ChecklistItem | null> {
+): Promise<ChecklistItem> {
   const token = await getAccessToken()
-  if (!token) return null
 
   const requestBody: Record<string, unknown> = {}
 
@@ -93,27 +95,20 @@ export async function updateChecklistItem(
   }
 
   if (Object.keys(requestBody).length === 0) {
-    // Nothing to update
-    return null
+    throw new ValidationError("No fields provided for checklist item update. At least one field must be specified.")
   }
 
-  const response = await makeGraphRequest<ChecklistItem>(
+  return (await makeGraphRequest<ChecklistItem>(
     `${MS_GRAPH_BASE}/me/todo/lists/${listId}/tasks/${taskId}/checklistItems/${checklistItemId}`,
     token,
     "PATCH",
     requestBody,
-  )
-  return response
+  ))!
 }
 
-/** Delete a checklist item from a task. Returns true on success, null on auth failure. */
-export async function deleteChecklistItem(
-  listId: string,
-  taskId: string,
-  checklistItemId: string,
-): Promise<boolean | null> {
+/** Delete a checklist item from a task. Returns true on success. */
+export async function deleteChecklistItem(listId: string, taskId: string, checklistItemId: string): Promise<boolean> {
   const token = await getAccessToken()
-  if (!token) return null
 
   await makeGraphRequest<null>(
     `${MS_GRAPH_BASE}/me/todo/lists/${listId}/tasks/${taskId}/checklistItems/${checklistItemId}`,
