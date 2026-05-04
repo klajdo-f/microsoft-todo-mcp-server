@@ -40,3 +40,6 @@ tokens.json
 .gsd-id
 .planning/
 .bg-shell/
+
+skills-lock.json
+.agents/
