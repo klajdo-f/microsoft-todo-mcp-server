@@ -299,6 +299,80 @@ describe("auth-callback-server", () => {
   })
 
   // -------------------------------------------------------------------------
+  // Personal account detection
+  // -------------------------------------------------------------------------
+  describe("personal account detection", () => {
+    it("returns 400 and skips token exchange when a consumer account hits the organizations endpoint", async () => {
+      const redirectUri = uniqueRedirectUri()
+      const port = new URL(redirectUri).port
+      const mockExchange = vi.fn().mockResolvedValue({
+        accessToken: "at-test",
+        refreshToken: "rt-test",
+        expiresAt: Date.now() + 3600 * 1000,
+      })
+      vi.mocked(createOAuthEngine).mockImplementation(
+        () =>
+          ({
+            getAuthUrl: vi.fn().mockResolvedValue("https://example.com/auth"),
+            exchangeAuthCode: mockExchange,
+            redirectUri,
+            tenantId: "organizations",
+          }) as any,
+      )
+
+      const { result } = await startAuthFlow({ redirectUri })
+
+      // client_info with utid = consumer tenant GUID
+      const clientInfo =
+        "eyJ1aWQiOiIwMDAwMDAwMC0wMDAwLTAwMDAtZjU0ZS0xN2VmOWJmM2I1NWQiLCJ1dGlkIjoiOTE4ODA0MGQtNmM2Ny00YzViLWIxMTItMzZhMzA0YjY2ZGFkIn0"
+      const response = await httpGet(
+        `http://localhost:${port}/callback?code=real-code&client_info=${clientInfo}`,
+      )
+
+      expect(response.status).toBe(400)
+      expect(response.body).toContain("Personal Microsoft account detected")
+
+      const flowResult = await result
+      expect(flowResult.success).toBe(false)
+      expect(flowResult.message).toContain("TENANT_ID=consumers")
+      expect(mockExchange).not.toHaveBeenCalled()
+    })
+
+    it("allows consumer accounts when TENANT_ID is already set to consumers", async () => {
+      const redirectUri = uniqueRedirectUri()
+      const port = new URL(redirectUri).port
+      const mockExchange = vi.fn().mockResolvedValue({
+        accessToken: "at-test",
+        refreshToken: "rt-test",
+        expiresAt: Date.now() + 3600 * 1000,
+      })
+      vi.mocked(createOAuthEngine).mockImplementation(
+        () =>
+          ({
+            getAuthUrl: vi.fn().mockResolvedValue("https://example.com/auth"),
+            exchangeAuthCode: mockExchange,
+            redirectUri,
+            tenantId: "consumers",
+          }) as any,
+      )
+
+      const { result } = await startAuthFlow({ redirectUri })
+
+      const clientInfo =
+        "eyJ1aWQiOiIwMDAwMDAwMC0wMDAwLTAwMDAtZjU0ZS0xN2VmOWJmM2I1NWQiLCJ1dGlkIjoiOTE4ODA0MGQtNmM2Ny00YzViLWIxMTItMzZhMzA0YjY2ZGFkIn0"
+      const response = await httpGet(
+        `http://localhost:${port}/callback?code=real-code&client_info=${clientInfo}`,
+      )
+
+      expect(response.status).toBe(200)
+      expect(mockExchange).toHaveBeenCalledWith("real-code")
+
+      const flowResult = await result
+      expect(flowResult.success).toBe(true)
+    })
+  })
+
+  // -------------------------------------------------------------------------
   // Non-callback requests
   // -------------------------------------------------------------------------
   describe("non-callback paths", () => {

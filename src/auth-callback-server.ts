@@ -95,6 +95,23 @@ function parseQuery(urlStr: string): Record<string, string> {
   return params
 }
 
+/** Microsoft Account (consumer / personal) tenant GUID. */
+const CONSUMER_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad"
+
+/**
+ * Parse client_info from the OAuth callback (Base64Url-encoded JSON).
+ * Returns null if missing or malformed.
+ */
+function parseClientInfo(value?: string): { uid?: string; utid?: string } | null {
+  if (!value) return null
+  try {
+    const json = Buffer.from(value, "base64url").toString("utf8")
+    return JSON.parse(json)
+  } catch {
+    return null
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -180,6 +197,24 @@ export async function startAuthFlow(
         return
       }
 
+      // Detect personal-account / tenant mismatch before attempting exchange.
+      const clientInfo = parseClientInfo(params["client_info"])
+      if (clientInfo?.utid === CONSUMER_TENANT && engine.tenantId === "organizations") {
+        const helpMsg =
+          "Personal Microsoft account detected, but TENANT_ID is set to \"organizations\" (the default). " +
+          "The Microsoft identity platform does not allow personal accounts (Outlook.com, Hotmail.com, Live.com, etc.) " +
+          "with the \"organizations\" endpoint for confidential-client OAuth flows. " +
+          "To authenticate with a personal account, set the environment variable TENANT_ID=consumers and restart the server, then run start-auth again."
+        console.error(`[start-auth] ${helpMsg}`)
+        sendHtml(
+          400,
+          `<html><body><h2>Authentication Failed</h2><p>${helpMsg.replace(/"/g, "&quot;")}</p><p>You can close this tab.</p></body></html>`,
+        )
+        cleanupActiveFlow()
+        resolve({ success: false, message: helpMsg })
+        return
+      }
+
       // Exchange the code for tokens
       console.error("[start-auth] Authorization code received. Exchanging for tokens…")
 
@@ -206,7 +241,7 @@ export async function startAuthFlow(
           console.error(`[start-auth] Token exchange failed: ${msg}`)
           sendHtml(
             500,
-            `<html><body><h2>Authentication Failed</h2><p>Token exchange failed.</p><p>You can close this tab.</p></body></html>`,
+            `<html><body><h2>Authentication Failed</h2><p>Token exchange failed.</p><pre>${msg.replace(/</g, "&lt;")}</pre><p>You can close this tab.</p></body></html>`,
           )
           cleanupActiveFlow()
           resolve({
