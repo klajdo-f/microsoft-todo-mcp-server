@@ -5,6 +5,7 @@ import { tokenManager } from "./token-manager.js"
 import { makeGraphRequest, getAccessToken, MS_GRAPH_BASE, USER_AGENT } from "./graph-client.js"
 import { startAuthFlow } from "./auth-callback-server.js"
 import { OAuthConfigError } from "./oauth-engine.js"
+import { openBrowser } from "./open-browser.js"
 
 // Log the current working directory
 console.error("Current working directory:", process.cwd())
@@ -145,7 +146,7 @@ server.tool(
 // Server tool to start the OAuth authentication flow
 server.tool(
   "start-auth",
-  "Start the Microsoft OAuth authentication flow. Returns a URL to visit in your browser. After you complete authentication, tokens are saved automatically. Use this when you need to authenticate for the first time or when your tokens have expired.",
+  "Start the Microsoft OAuth authentication flow. Automatically opens your default browser to the authentication page. After you complete authentication, tokens are saved automatically. Use this when you need to authenticate for the first time or when your tokens have expired.",
   {},
   async () => {
     try {
@@ -165,6 +166,9 @@ server.tool(
           console.error("[start-auth] Auth flow error:", err)
         })
 
+      // Open the default browser automatically
+      await openBrowser(authUrl)
+
       // Emit an OSC 8 hyperlink to stderr for terminal-native clickability
       // (supported by Windows Terminal >= 1.4, iTerm2, GNOME Terminal, etc.)
       const osc8Open = "\u001b]8;;"
@@ -178,11 +182,13 @@ server.tool(
           {
             type: "text",
             text: [
-              "Open this URL in your browser to authenticate with Microsoft:",
+              "Opening your default browser for Microsoft authentication…",
+              "",
+              "If it didn't open automatically, use one of the options below:",
               "",
               `[Click to authenticate](${authUrl})`,
               "",
-              "Or copy and paste the full URL below:",
+              "Or copy and paste the full URL:",
               "```",
               authUrl,
               "```",
