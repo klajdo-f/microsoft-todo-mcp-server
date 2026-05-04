@@ -12,6 +12,7 @@
 import { readFileSync, writeFileSync, existsSync } from "fs"
 import { join } from "path"
 import { getTokenFilePath } from "../paths.js"
+import { logger } from "./logger.js"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,7 +40,7 @@ export class TokenRepository {
   constructor() {
     // Use shared platform-specific path utilities
     this.tokenFilePath = getTokenFilePath()
-    console.error(`Token file path: ${this.tokenFilePath}`)
+    logger.debug(`Token file path: ${this.tokenFilePath}`, { source: "token-repository" })
   }
 
   async getTokens(): Promise<StoredTokenData | null> {
@@ -61,7 +62,7 @@ export class TokenRepository {
           return this.currentTokens
         }
       } catch (error) {
-        console.error("Error reading token file:", error)
+        logger.error("Error reading token file:", { source: "token-repository", error: error instanceof Error ? error.message : String(error) })
       }
     }
 
@@ -77,7 +78,7 @@ export class TokenRepository {
 
         return tokens
       } catch (error) {
-        console.error("Error reading legacy token file:", error)
+        logger.error("Error reading legacy token file:", { source: "token-repository", error: error instanceof Error ? error.message : String(error) })
       }
     }
 
@@ -91,7 +92,7 @@ export class TokenRepository {
     const tenantId = process.env.TENANT_ID || "organizations"
 
     if (!clientId || !clientSecret) {
-      console.error("Missing client credentials for token refresh")
+      logger.warn("Missing client credentials for token refresh", { source: "token-repository" })
       return null
     }
 
@@ -117,7 +118,7 @@ export class TokenRepository {
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error(`Token refresh failed: ${errorText}`)
+        logger.error(`Token refresh failed: ${errorText}`, { source: "token-repository", status: response.status })
 
         // Persist failure metadata to token file
         this.persistRefreshError(`HTTP ${response.status}: ${errorText}`, now)
@@ -146,7 +147,7 @@ export class TokenRepository {
       return newTokens
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      console.error("Error refreshing token:", error)
+      logger.error("Error refreshing token:", { source: "token-repository", error: message })
 
       // Persist failure metadata to token file
       this.persistRefreshError(message, now)
@@ -167,7 +168,7 @@ export class TokenRepository {
       try {
         writeFileSync(this.tokenFilePath, JSON.stringify(this.currentTokens, null, 2), "utf8")
       } catch (writeError) {
-        console.error("Failed to persist refresh error:", writeError)
+        logger.error("Failed to persist refresh error:", { source: "token-repository", error: writeError instanceof Error ? writeError.message : String(writeError) })
       }
     }
   }
@@ -178,20 +179,14 @@ export class TokenRepository {
   }
 
   promptForReauth(): void {
-    console.error(`
-=================================================================
-TOKEN REFRESH FAILED - REAUTHENTICATION REQUIRED
-
-Your Microsoft To Do tokens have expired and could not be refreshed.
-
-To fix this:
-1. Use the "start-auth" MCP tool to re-authenticate
-2. Complete the authentication in your browser
-3. Your tokens will be refreshed automatically
-
-Your tokens are stored in: ${this.tokenFilePath}
-=================================================================
-    `)
+    logger.info(
+      "TOKEN REFRESH FAILED - REAUTHENTICATION REQUIRED. " +
+        "Your Microsoft To Do tokens have expired and could not be refreshed. " +
+        "Use the 'start-auth' MCP tool to re-authenticate, complete the authentication in your browser, " +
+        "and your tokens will be refreshed automatically. " +
+        `Token file: ${this.tokenFilePath}`,
+      { source: "token-repository" },
+    )
   }
 }
 

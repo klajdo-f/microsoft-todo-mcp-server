@@ -1,5 +1,6 @@
 import { exec } from "child_process"
 import { promisify } from "util"
+import { logger } from "./infrastructure/logger.js"
 
 const execAsync = promisify(exec)
 
@@ -24,9 +25,9 @@ export async function openBrowser(url: string): Promise<void> {
 
   try {
     await execAsync(cmd, { timeout: 10_000 })
-    console.error(`[open-browser] Opened ${url} in default browser.`)
+    logger.info(`Opened ${url} in default browser.`, { source: "open-browser" })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    console.error(`[open-browser] Failed to open browser: ${message}`)
+    logger.error(`Failed to open browser: ${message}`, { source: "open-browser" })
   }
 }

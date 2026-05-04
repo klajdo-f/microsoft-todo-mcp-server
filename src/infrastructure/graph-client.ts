@@ -14,6 +14,7 @@
  *   - 204 No Content → returns `null` (no JSON parsing attempted)
  */
 import { tokenManager } from "../token-manager.js"
+import { logger } from "./logger.js"
 import {
   AuthError,
   GraphApiError,
@@ -57,8 +58,8 @@ export async function makeGraphRequest<T>(
       options.body = JSON.stringify(body)
     }
 
-    console.error(`Making request to: ${url}`)
-    console.error(
+    logger.debug(`Making request to: ${url}`, { source: "graph-client", method })
+    logger.debug(
       `Request options: ${JSON.stringify({
         method,
         headers: {
@@ -66,13 +67,14 @@ export async function makeGraphRequest<T>(
           Authorization: "Bearer [REDACTED]",
         },
       })}`,
+      { source: "graph-client" },
     )
 
     let response = await fetch(url, options)
 
     // If we get a 401, try to refresh the token and retry once
     if (response.status === 401) {
-      console.error("Got 401, attempting token refresh...")
+      logger.info("Got 401, attempting token refresh...", { source: "graph-client" })
       const newToken = await getAccessToken()
       if (newToken !== token) {
         // Retry with new token
@@ -83,11 +85,11 @@ export async function makeGraphRequest<T>(
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error(`HTTP error! status: ${response.status}, body: ${errorText}`)
+      logger.warn(`HTTP error! status: ${response.status}, body: ${errorText}`, { source: "graph-client", status: response.status })
 
       // Check for the specific MailboxNotEnabledForRESTAPI error
       if (errorText.includes("MailboxNotEnabledForRESTAPI")) {
-        console.error(`MailboxNotEnabledForRESTAPI detected for personal account`)
+        logger.warn(`MailboxNotEnabledForRESTAPI detected for personal account`, { source: "graph-client", status: response.status })
         throw new MailboxNotEnabledError(
           "Microsoft To Do API is not available for personal Microsoft accounts. " +
             "Only Microsoft 365 business accounts have API access.",
@@ -103,33 +105,29 @@ export async function makeGraphRequest<T>(
       }
 
       if (response.status === 403) {
-        throw new PermissionDeniedError(
-          "Insufficient permissions for this operation. Check required scopes.",
-          { status: response.status, body: errorText },
-        )
+        throw new PermissionDeniedError("Insufficient permissions for this operation. Check required scopes.", {
+          status: response.status,
+          body: errorText,
+        })
       }
 
-      throw new GraphApiError(
-        `Graph API error: ${response.status}`,
-        response.status,
-        errorText,
-      )
+      throw new GraphApiError(`Graph API error: ${response.status}`, response.status, errorText)
     }
 
     // Guard: 204 No Content or empty body — skip JSON parsing
     if (response.status === 204) {
-      console.error("Received 204 No Content — returning null")
+      logger.debug("Received 204 No Content — returning null", { source: "graph-client" })
       return null as T
     }
 
     const text = await response.text()
     if (!text || text.trim().length === 0) {
-      console.error("Empty response body — returning null")
+      logger.debug("Empty response body — returning null", { source: "graph-client" })
       return null as T
     }
 
     const data = JSON.parse(text)
-    console.error(`Response received: ${JSON.stringify(data).substring(0, 200)}...`)
+    logger.debug(`Response received: ${JSON.stringify(data).substring(0, 200)}...`, { source: "graph-client" })
     return data as T
   } catch (error) {
     // Rethrow already-typed domain exceptions
@@ -138,7 +136,7 @@ export async function makeGraphRequest<T>(
     }
 
     // Wrap unexpected failures as NetworkError
-    console.error("Network/transport error in Graph API request:", error)
+    logger.error("Network/transport error in Graph API request:", { source: "graph-client", error: error instanceof Error ? error.message : String(error) })
     throw new NetworkError(
       `Network error during Graph API request: ${error instanceof Error ? error.message : String(error)}`,
       error instanceof Error ? error : undefined,
@@ -154,13 +152,13 @@ export async function makeGraphRequest<T>(
  * re-authentication.
  */
 export async function getAccessToken(): Promise<string> {
-  console.error("getAccessToken called")
+  logger.debug("getAccessToken called", { source: "graph-client" })
 
   try {
     const tokens = await tokenManager.getTokens()
 
     if (tokens) {
-      console.error("Successfully retrieved valid token")
+      logger.debug("Successfully retrieved valid token", { source: "graph-client" })
       return tokens.accessToken
     }
 
@@ -171,8 +169,6 @@ export async function getAccessToken(): Promise<string> {
       throw error
     }
 
-    throw new AuthError(
-      `Failed to retrieve access token: ${error instanceof Error ? error.message : String(error)}`,
-    )
+    throw new AuthError(`Failed to retrieve access token: ${error instanceof Error ? error.message : String(error)}`)
   }
 }

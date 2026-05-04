@@ -10,6 +10,7 @@
  * directly compatible with `TokenManager.saveTokens()`.
  */
 import { ConfidentialClientApplication, Configuration, LogLevel, AuthenticationResult } from "@azure/msal-node"
+import { logger } from "./infrastructure/logger.js"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -89,7 +90,7 @@ export function createOAuthEngine(options?: {
     system: {
       loggerOptions: {
         loggerCallback(_logLevel: LogLevel, message: string, _containsPii: boolean) {
-          console.error(`[MSAL] ${message}`)
+          logger.debug(`[MSAL] ${message}`, { source: "msal" })
         },
         piiLoggingEnabled: false,
         logLevel: LogLevel.Warning,
