@@ -201,9 +201,9 @@ export async function startAuthFlow(
       const clientInfo = parseClientInfo(params["client_info"])
       if (clientInfo?.utid === CONSUMER_TENANT && engine.tenantId === "organizations") {
         const helpMsg =
-          "Personal Microsoft account detected, but TENANT_ID is set to \"organizations\" (the default). " +
+          'Personal Microsoft account detected, but TENANT_ID is set to "organizations" (the default). ' +
           "The Microsoft identity platform does not allow personal accounts (Outlook.com, Hotmail.com, Live.com, etc.) " +
-          "with the \"organizations\" endpoint for confidential-client OAuth flows. " +
+          'with the "organizations" endpoint for confidential-client OAuth flows. ' +
           "To authenticate with a personal account, set the environment variable TENANT_ID=consumers and restart the server, then run start-auth again."
         console.error(`[start-auth] ${helpMsg}`)
         sendHtml(

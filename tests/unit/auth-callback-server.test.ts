@@ -325,9 +325,7 @@ describe("auth-callback-server", () => {
       // client_info with utid = consumer tenant GUID
       const clientInfo =
         "eyJ1aWQiOiIwMDAwMDAwMC0wMDAwLTAwMDAtZjU0ZS0xN2VmOWJmM2I1NWQiLCJ1dGlkIjoiOTE4ODA0MGQtNmM2Ny00YzViLWIxMTItMzZhMzA0YjY2ZGFkIn0"
-      const response = await httpGet(
-        `http://localhost:${port}/callback?code=real-code&client_info=${clientInfo}`,
-      )
+      const response = await httpGet(`http://localhost:${port}/callback?code=real-code&client_info=${clientInfo}`)
 
       expect(response.status).toBe(400)
       expect(response.body).toContain("Personal Microsoft account detected")
@@ -360,9 +358,7 @@ describe("auth-callback-server", () => {
 
       const clientInfo =
         "eyJ1aWQiOiIwMDAwMDAwMC0wMDAwLTAwMDAtZjU0ZS0xN2VmOWJmM2I1NWQiLCJ1dGlkIjoiOTE4ODA0MGQtNmM2Ny00YzViLWIxMTItMzZhMzA0YjY2ZGFkIn0"
-      const response = await httpGet(
-        `http://localhost:${port}/callback?code=real-code&client_info=${clientInfo}`,
-      )
+      const response = await httpGet(`http://localhost:${port}/callback?code=real-code&client_info=${clientInfo}`)
 
       expect(response.status).toBe(200)
       expect(mockExchange).toHaveBeenCalledWith("real-code")

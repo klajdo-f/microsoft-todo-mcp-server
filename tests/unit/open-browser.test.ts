@@ -43,11 +43,7 @@ describe("openBrowser", () => {
 
     await openBrowser("https://example.com/auth")
 
-    expect(execMock).toHaveBeenCalledWith(
-      `open "https://example.com/auth"`,
-      { timeout: 10_000 },
-      expect.any(Function),
-    )
+    expect(execMock).toHaveBeenCalledWith(`open "https://example.com/auth"`, { timeout: 10_000 }, expect.any(Function))
 
     vi.unstubAllGlobals()
   })

@@ -18,8 +18,7 @@ import type { ChecklistItemFields } from "../../application/checklist-service.js
 // Constants
 // ---------------------------------------------------------------------------
 
-const NOT_AUTHENTICATED =
-  "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft."
+const NOT_AUTHENTICATED = "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft."
 
 // ---------------------------------------------------------------------------
 // Tool registration
