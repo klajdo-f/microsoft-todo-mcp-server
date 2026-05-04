@@ -16,6 +16,7 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "http"
 import { createOAuthEngine, OAuthConfigError, OAuthExchangeError } from "./oauth-engine.js"
 import { tokenManager, type StoredTokenData } from "./token-manager.js"
+import { logger } from "./infrastructure/logger.js"
 
 // ---------------------------------------------------------------------------
 // Types
@@ -140,25 +141,25 @@ export async function startAuthFlow(
 
   // 2. Get the authorization URL
   const authUrl = await engine.getAuthUrl()
-  console.error("[start-auth] Authorization URL generated. Waiting for callback…")
+  logger.info("[start-auth] Authorization URL generated. Waiting for callback…", { source: "start-auth" })
 
   // 3. Create a promise that resolves when the flow finishes
   const result = new Promise<AuthFlowResult>((resolve) => {
     const port = portFromRedirectUri(redirectUri)
 
     const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-      console.error(`[start-auth] HTTP request received: ${req.method} ${req.url}`)
+      logger.debug(`[start-auth] HTTP request received: ${req.method} ${req.url}`, { source: "start-auth" })
       // Only handle the callback path
       if (!req.url?.startsWith("/callback")) {
-        console.error(`[start-auth] Request path does not match /callback — returning 404`)
+        logger.debug("[start-auth] Request path does not match /callback — returning 404", { source: "start-auth" })
         res.writeHead(404)
         res.end("Not found")
         return
       }
-      console.error(`[start-auth] Callback path matched, parsing query params…`)
+      logger.debug("[start-auth] Callback path matched, parsing query params…", { source: "start-auth" })
 
       const params = parseQuery(req.url)
-      console.error(`[start-auth] Parsed params: ${JSON.stringify(params)}`)
+      logger.debug("[start-auth] Parsed params from callback", { source: "start-auth", params: Object.keys(params) })
       const code = params["code"]
       const error = params["error"]
       const errorDescription = params["error_description"]
@@ -170,7 +171,7 @@ export async function startAuthFlow(
       }
 
       if (error) {
-        console.error(`[start-auth] OAuth error in callback: ${error}`)
+        logger.error("[start-auth] OAuth error in callback", { source: "start-auth", error, errorDescription })
         sendHtml(
           400,
           `<html><body><h2>Authentication Failed</h2><p>${errorDescription || error}</p><p>You can close this tab.</p></body></html>`,
@@ -184,7 +185,7 @@ export async function startAuthFlow(
       }
 
       if (!code) {
-        console.error("[start-auth] Callback received without authorization code.")
+        logger.warn("[start-auth] Callback received without authorization code.", { source: "start-auth" })
         sendHtml(
           400,
           `<html><body><h2>Authentication Failed</h2><p>No authorization code received.</p><p>You can close this tab.</p></body></html>`,
@@ -205,7 +206,7 @@ export async function startAuthFlow(
           "The Microsoft identity platform does not allow personal accounts (Outlook.com, Hotmail.com, Live.com, etc.) " +
           'with the "organizations" endpoint for confidential-client OAuth flows. ' +
           "To authenticate with a personal account, set the environment variable TENANT_ID=consumers and restart the server, then run start-auth again."
-        console.error(`[start-auth] ${helpMsg}`)
+        logger.warn(`[start-auth] ${helpMsg}`, { source: "start-auth" })
         sendHtml(
           400,
           `<html><body><h2>Authentication Failed</h2><p>${helpMsg.replace(/"/g, "&quot;")}</p><p>You can close this tab.</p></body></html>`,
@@ -216,7 +217,7 @@ export async function startAuthFlow(
       }
 
       // Exchange the code for tokens
-      console.error("[start-auth] Authorization code received. Exchanging for tokens…")
+      logger.info("[start-auth] Authorization code received. Exchanging for tokens…", { source: "start-auth" })
 
       engine
         .exchangeAuthCode(code)
@@ -227,7 +228,7 @@ export async function startAuthFlow(
             expiresAt: tokenResult.expiresAt,
           }
           tokenManager.saveTokens(stored)
-          console.error("[start-auth] Tokens saved successfully.")
+          logger.info("[start-auth] Tokens saved successfully.", { source: "start-auth" })
 
           sendHtml(
             200,
@@ -238,7 +239,7 @@ export async function startAuthFlow(
         })
         .catch((err: unknown) => {
           const msg = err instanceof Error ? err.message : String(err)
-          console.error(`[start-auth] Token exchange failed: ${msg}`)
+          logger.error("[start-auth] Token exchange failed", { source: "start-auth", error: msg })
           sendHtml(
             500,
             `<html><body><h2>Authentication Failed</h2><p>Token exchange failed.</p><pre>${msg.replace(/</g, "&lt;")}</pre><p>You can close this tab.</p></body></html>`,
@@ -255,7 +256,7 @@ export async function startAuthFlow(
 
     // Set up timeout
     activeTimer = setTimeout(() => {
-      console.error("[start-auth] Timed out waiting for callback.")
+      logger.warn("[start-auth] Timed out waiting for callback.", { source: "start-auth", timeoutMs })
       cleanupActiveFlow()
       resolve({
         success: false,
@@ -265,12 +266,12 @@ export async function startAuthFlow(
     }, timeoutMs)
 
     server.listen(port, () => {
-      console.error(`[start-auth] Callback server listening on port ${port}`)
+      logger.info(`[start-auth] Callback server listening on port ${port}`, { source: "start-auth", port })
     })
 
     // Handle server errors (e.g., port already in use)
     server.on("error", (err: Error) => {
-      console.error(`[start-auth] Server error: ${err.message}`)
+      logger.error("[start-auth] Server error", { source: "start-auth", error: err.message })
       cleanupActiveFlow()
       resolve({
         success: false,

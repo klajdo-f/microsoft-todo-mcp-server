@@ -2,6 +2,7 @@
 
 import { startServer } from "./todo-index.js"
 import { pathToFileURL } from "url"
+import { logger } from "./infrastructure/logger.js"
 
 /**
  * CLI entry point. Checks for OAuth client credentials (CLIENT_ID and
@@ -16,9 +17,10 @@ export async function runCli(): Promise<void> {
 
   if (missing.length > 0) {
     const list = missing.join(" and ")
-    console.error(
+    logger.error(
       `Microsoft To Do MCP server: missing required credential${missing.length > 1 ? "s" : ""}: ${list}. ` +
         `Provide them via the MCP client's "env" field in your server configuration.`,
+      { source: "cli", missing },
     )
     throw new Error(`Missing required credential(s): ${list}`)
   }
@@ -29,7 +31,7 @@ export async function runCli(): Promise<void> {
 // Only run when executed directly (not when imported by tests)
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   runCli().catch((error) => {
-    console.error("Fatal error starting server:", error)
+    logger.error("Fatal error starting server", { source: "cli", error: error instanceof Error ? error.message : String(error) })
     process.exit(1)
   })
 }

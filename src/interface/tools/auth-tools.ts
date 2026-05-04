@@ -12,6 +12,7 @@ import { startAuthFlow } from "../../auth-callback-server.js"
 import { OAuthConfigError } from "../../oauth-engine.js"
 import { openBrowser } from "../../open-browser.js"
 import { handleToolError } from "../error-handler.js"
+import { logger } from "../../infrastructure/logger.js"
 
 // ---------------------------------------------------------------------------
 // Helper: personal-account detection
@@ -34,7 +35,7 @@ async function isPersonalMicrosoftAccount(): Promise<boolean> {
     })
 
     if (!response.ok) {
-      console.error(`Error getting user info: ${response.status}`)
+      logger.error("Error getting user info", { source: "auth-tools", status: response.status })
       return false
     }
 
@@ -43,28 +44,24 @@ async function isPersonalMicrosoftAccount(): Promise<boolean> {
     const domain = email.split("@")[1]?.toLowerCase()
 
     if (domain && PERSONAL_DOMAINS.some((d) => domain.includes(d))) {
-      console.error(`
-=================================================================
-WARNING: Personal Microsoft Account Detected
-
-Your Microsoft account (${email}) appears to be a personal account.
-Microsoft To Do API access is typically not available for personal accounts
-through the Microsoft Graph API, only for Microsoft 365 business accounts.
-
-You may encounter the "MailboxNotEnabledForRESTAPI" error when trying to
-access To Do lists or tasks. This is a limitation of the Microsoft Graph API,
-not an issue with your authentication or this application.
-
-You can still use Microsoft To Do through the web interface or mobile apps,
-but API access is restricted for personal accounts.
-=================================================================
-      `)
+      logger.warn(
+        "Personal Microsoft Account Detected: " +
+          `Your Microsoft account (${email}) appears to be a personal account. ` +
+          "Microsoft To Do API access is typically not available for personal accounts " +
+          "through the Microsoft Graph API, only for Microsoft 365 business accounts. " +
+          "You may encounter the 'MailboxNotEnabledForRESTAPI' error when trying to " +
+          "access To Do lists or tasks. This is a limitation of the Microsoft Graph API, " +
+          "not an issue with your authentication or this application. " +
+          "You can still use Microsoft To Do through the web interface or mobile apps, " +
+          "but API access is restricted for personal accounts.",
+        { source: "auth-tools", email },
+      )
       return true
     }
 
     return false
   } catch (error) {
-    console.error("Error checking account type:", error)
+    logger.error("Error checking account type", { source: "auth-tools", error: error instanceof Error ? error.message : String(error) })
     return false
   }
 }
@@ -157,13 +154,13 @@ export function registerAuthTools(server: McpServer): void {
         result
           .then((flowResult) => {
             if (flowResult.success) {
-              console.error("[start-auth] Authentication completed successfully.")
+              logger.info("[start-auth] Authentication completed successfully.", { source: "auth-tools" })
             } else {
-              console.error(`[start-auth] Authentication failed: ${flowResult.message}`)
+              logger.error("[start-auth] Authentication failed", { source: "auth-tools", message: flowResult.message })
             }
           })
           .catch((err: unknown) => {
-            console.error("[start-auth] Auth flow error:", err)
+            logger.error("[start-auth] Auth flow error", { source: "auth-tools", error: err instanceof Error ? err.message : String(err) })
           })
 
         // Open the default browser automatically
@@ -173,8 +170,9 @@ export function registerAuthTools(server: McpServer): void {
         // (supported by Windows Terminal >= 1.4, iTerm2, GNOME Terminal, etc.)
         const osc8Open = "\u001b]8;;"
         const osc8Close = "\u0007"
-        console.error(
+        logger.info(
           `[start-auth] ${osc8Open}${authUrl}${osc8Close}🔗 Click here to authenticate${osc8Open}${osc8Close}`,
+          { source: "auth-tools" },
         )
 
         return {

@@ -13,6 +13,7 @@ import { registerListTools } from "./tools/list-tools.js"
 import { registerTaskTools } from "./tools/task-tools.js"
 import { registerChecklistTools } from "./tools/checklist-tools.js"
 import { registerDebugTools } from "./tools/debug-tools.js"
+import { logger } from "../infrastructure/logger.js"
 
 // ---------------------------------------------------------------------------
 // Server configuration (kept for backward compatibility)
@@ -64,9 +65,9 @@ export async function startServer(_config?: ServerConfig): Promise<void> {
     const transport = new StdioServerTransport()
     await server.connect(transport)
 
-    console.error("Server started and listening")
+    logger.info("Server started and listening", { source: "server" })
   } catch (error) {
-    console.error("Error starting server:", error)
+    logger.error("Error starting server:", { source: "server", error: error instanceof Error ? error.message : String(error) })
     throw error
   }
 }
