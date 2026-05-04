@@ -6,6 +6,7 @@ import { makeGraphRequest, getAccessToken, MS_GRAPH_BASE, USER_AGENT } from "./g
 import { startAuthFlow } from "./auth-callback-server.js"
 import { OAuthConfigError } from "./oauth-engine.js"
 import { openBrowser } from "./open-browser.js"
+import type { TaskList, Task, ChecklistItem } from "./domain/entities.js"
 
 // Log the current working directory
 console.error("Current working directory:", process.cwd())
@@ -222,45 +223,6 @@ server.tool(
     }
   },
 )
-
-interface TaskList {
-  id: string
-  displayName: string
-  isOwner?: boolean
-  isShared?: boolean
-  wellknownListName?: string // 'none', 'defaultList', 'flaggedEmails', 'unknownFutureValue'
-}
-
-interface Task {
-  id: string
-  title: string
-  status: string
-  importance: string
-  dueDateTime?: {
-    dateTime: string
-    timeZone: string
-  }
-  completedDateTime?: {
-    dateTime: string
-    timeZone: string
-  }
-  reminderDateTime?: {
-    dateTime: string
-    timeZone: string
-  }
-  body?: {
-    content: string
-    contentType: string
-  }
-  categories?: string[]
-}
-
-interface ChecklistItem {
-  id: string
-  displayName: string
-  isChecked: boolean
-  createdDateTime?: string
-}
 
 // Register tools
 server.tool(
