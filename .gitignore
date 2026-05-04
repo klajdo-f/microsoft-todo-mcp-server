@@ -32,3 +32,11 @@ tokens.json
 *.sw?
 .DS_Store
 
+# ── GSD ──
+.gsd/
+
+.gsd.lock/
+.gsd.migrating/
+.gsd-id
+.planning/
+.bg-shell/
