@@ -2,7 +2,7 @@
 import dotenv from "dotenv"
 import express, { Request, Response } from "express"
 import fs from "fs"
-import { join, dirname } from "path"
+import { dirname } from "path"
 import {
   ConfidentialClientApplication,
   AccountInfo,
@@ -10,7 +10,22 @@ import {
   Configuration,
   LogLevel,
 } from "@azure/msal-node"
-import { fileURLToPath } from "url"
+import { getTokenFilePath, ensureConfigDir } from "./paths.js"
+
+// Parse --token-file CLI argument for explicit token path override
+function parseTokenFileArg(): string | null {
+  const args = process.argv.slice(2)
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--token-file" && args[i + 1]) {
+      return args[i + 1]
+    }
+    // Support --token-file=/path syntax
+    if (args[i].startsWith("--token-file=")) {
+      return args[i].substring("--token-file=".length)
+    }
+  }
+  return null
+}
 
 // Initialize environment variables
 dotenv.config()
@@ -23,13 +38,14 @@ console.log(
 )
 console.log("REDIRECT_URI:", process.env.REDIRECT_URI || `http://localhost:3000/callback`)
 
-// Get current file directory in ESM
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
-
 const app = express()
 const port = 3000
-const TOKEN_FILE_PATH = join(process.cwd(), "tokens.json")
+
+// Ensure the config directory exists before any token writes
+ensureConfigDir()
+const cliTokenPath = parseTokenFileArg()
+const TOKEN_FILE_PATH = cliTokenPath || getTokenFilePath()
+console.log("Token file path:", TOKEN_FILE_PATH)
 
 // Determine the tenant ID to use:
 // - 'common' for both organization accounts and personal accounts

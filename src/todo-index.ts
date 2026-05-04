@@ -220,12 +220,21 @@ server.tool(
         "This is a Microsoft limitation, not an authentication issue."
     }
 
+    // Build refresh failure metadata section if present
+    let refreshFailureMessage = ""
+    if (tokens.lastRefreshError) {
+      const attemptTime = tokens.lastRefreshAttempt
+        ? new Date(tokens.lastRefreshAttempt).toLocaleString()
+        : "unknown time"
+      refreshFailureMessage = `\n\n⚠️ Last token refresh failed at ${attemptTime}: ${tokens.lastRefreshError}`
+    }
+
     if (isExpired) {
       return {
         content: [
           {
             type: "text",
-            text: `Authentication expired at ${expiryTime}. Will attempt to refresh when you call any API.${accountMessage}`,
+            text: `Authentication expired at ${expiryTime}. Will attempt to refresh when you call any API.${accountMessage}${refreshFailureMessage}`,
           },
         ],
       }
@@ -234,7 +243,7 @@ server.tool(
         content: [
           {
             type: "text",
-            text: `Authenticated. Token expires at ${expiryTime}.${accountMessage}`,
+            text: `Authenticated. Token expires at ${expiryTime}.${accountMessage}${refreshFailureMessage}`,
           },
         ],
       }

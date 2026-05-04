@@ -1,7 +1,6 @@
-// src/token-manager.ts
 import { readFileSync, writeFileSync, existsSync } from "fs"
 import { join } from "path"
-import { homedir } from "os"
+import { getTokenFilePath } from "./paths.js"
 
 interface TokenData {
   accessToken: string
@@ -9,10 +8,12 @@ interface TokenData {
   expiresAt: number
 }
 
-interface StoredTokenData extends TokenData {
+export interface StoredTokenData extends TokenData {
   clientId?: string
   clientSecret?: string
   tenantId?: string
+  lastRefreshError?: string
+  lastRefreshAttempt?: number
 }
 
 export class TokenManager {
@@ -20,43 +21,13 @@ export class TokenManager {
   private currentTokens: StoredTokenData | null = null
 
   constructor() {
-    // Store tokens in a consistent location across platforms
-    const configDir =
-      process.platform === "win32"
-        ? join(process.env.APPDATA || join(homedir(), "AppData", "Roaming"), "microsoft-todo-mcp")
-        : join(homedir(), ".config", "microsoft-todo-mcp")
-
-    // Create directory if it doesn't exist
-    if (!existsSync(configDir)) {
-      require("fs").mkdirSync(configDir, { recursive: true })
-    }
-
-    this.tokenFilePath = join(configDir, "tokens.json")
+    // Use shared platform-specific path utilities
+    this.tokenFilePath = getTokenFilePath()
     console.error(`Token file path: ${this.tokenFilePath}`)
   }
 
-  // Try to get tokens from multiple sources
-  async getTokens(): Promise<TokenData | null> {
-    // 1. Check environment variables first (for backward compatibility)
-    if (process.env.MS_TODO_ACCESS_TOKEN && process.env.MS_TODO_REFRESH_TOKEN) {
-      const envTokens: TokenData = {
-        accessToken: process.env.MS_TODO_ACCESS_TOKEN,
-        refreshToken: process.env.MS_TODO_REFRESH_TOKEN,
-        expiresAt: Date.now() + 3600 * 1000, // Assume 1 hour if not specified
-      }
-
-      // Check if expired
-      if (Date.now() > envTokens.expiresAt) {
-        // Try to refresh
-        const refreshed = await this.refreshToken(envTokens.refreshToken)
-        if (refreshed) {
-          return refreshed
-        }
-      }
-      return envTokens
-    }
-
-    // 2. Check stored token file
+  async getTokens(): Promise<StoredTokenData | null> {
+    // Check stored token file
     if (existsSync(this.tokenFilePath)) {
       try {
         const data = readFileSync(this.tokenFilePath, "utf8")
@@ -78,7 +49,7 @@ export class TokenManager {
       }
     }
 
-    // 3. Check legacy token file location
+    // Check legacy token file location (one-time migration)
     const legacyPath = join(process.cwd(), "tokens.json")
     if (existsSync(legacyPath)) {
       try {
@@ -98,19 +69,20 @@ export class TokenManager {
   }
 
   async refreshToken(refreshToken: string): Promise<TokenData | null> {
+    // Get client credentials from stored tokens or environment
+    const clientId = this.currentTokens?.clientId || process.env.CLIENT_ID
+    const clientSecret = this.currentTokens?.clientSecret || process.env.CLIENT_SECRET
+    const tenantId = this.currentTokens?.tenantId || process.env.TENANT_ID || "organizations"
+
+    if (!clientId || !clientSecret) {
+      console.error("Missing client credentials for token refresh")
+      return null
+    }
+
+    const now = Date.now()
+    const tokenEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`
+
     try {
-      // Get client credentials from stored tokens or environment
-      const clientId = this.currentTokens?.clientId || process.env.CLIENT_ID
-      const clientSecret = this.currentTokens?.clientSecret || process.env.CLIENT_SECRET
-      const tenantId = this.currentTokens?.tenantId || process.env.TENANT_ID || "organizations"
-
-      if (!clientId || !clientSecret) {
-        console.error("Missing client credentials for token refresh")
-        return null
-      }
-
-      const tokenEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`
-
       const formData = new URLSearchParams({
         client_id: clientId,
         client_secret: clientSecret,
@@ -131,7 +103,9 @@ export class TokenManager {
         const errorText = await response.text()
         console.error(`Token refresh failed: ${errorText}`)
 
-        // If refresh fails, prompt for re-authentication
+        // Persist failure metadata to token file
+        this.persistRefreshError(`HTTP ${response.status}: ${errorText}`, now)
+
         this.promptForReauth()
         return null
       }
@@ -147,56 +121,47 @@ export class TokenManager {
         tenantId,
       }
 
+      // Clear any previous error on success
+      if (this.currentTokens) {
+        delete this.currentTokens.lastRefreshError
+        delete this.currentTokens.lastRefreshAttempt
+      }
+
       // Save the refreshed tokens
       this.saveTokens(newTokens)
 
-      // Also update Claude config if possible
-      await this.updateClaudeConfig(newTokens)
-
       return newTokens
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
       console.error("Error refreshing token:", error)
+
+      // Persist failure metadata to token file
+      this.persistRefreshError(message, now)
+
       this.promptForReauth()
       return null
+    }
+  }
+
+  /**
+   * Persist refresh failure metadata alongside existing tokens so that
+   * auth-status can surface the last failure to the user.
+   */
+  private persistRefreshError(errorMessage: string, timestamp: number): void {
+    if (this.currentTokens) {
+      this.currentTokens.lastRefreshError = errorMessage
+      this.currentTokens.lastRefreshAttempt = timestamp
+      try {
+        writeFileSync(this.tokenFilePath, JSON.stringify(this.currentTokens, null, 2), "utf8")
+      } catch (writeError) {
+        console.error("Failed to persist refresh error:", writeError)
+      }
     }
   }
 
   saveTokens(tokens: StoredTokenData): void {
     this.currentTokens = tokens
     writeFileSync(this.tokenFilePath, JSON.stringify(tokens, null, 2), "utf8")
-  }
-
-  // Update Claude config automatically
-  async updateClaudeConfig(tokens: TokenData): Promise<void> {
-    try {
-      const claudeConfigPath =
-        process.platform === "win32"
-          ? join(process.env.APPDATA || "", "Claude", "claude_desktop_config.json")
-          : process.platform === "darwin"
-            ? join(homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json")
-            : join(homedir(), ".config", "Claude", "claude_desktop_config.json")
-
-      if (!existsSync(claudeConfigPath)) {
-        return
-      }
-
-      const config = JSON.parse(readFileSync(claudeConfigPath, "utf8"))
-
-      // Update the microsoft-todo server config
-      if (config.mcpServers && config.mcpServers["microsoft-todo"]) {
-        config.mcpServers["microsoft-todo"].env = {
-          ...config.mcpServers["microsoft-todo"].env,
-          MS_TODO_ACCESS_TOKEN: tokens.accessToken,
-          MS_TODO_REFRESH_TOKEN: tokens.refreshToken,
-        }
-
-        // Write back the updated config
-        writeFileSync(claudeConfigPath, JSON.stringify(config, null, 2), "utf8")
-        console.error("Updated Claude config with new tokens")
-      }
-    } catch (error) {
-      console.error("Could not update Claude config:", error)
-    }
   }
 
   promptForReauth(): void {

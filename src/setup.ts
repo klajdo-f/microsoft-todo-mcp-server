@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs"
-import { join } from "path"
-import { homedir } from "os"
+import { readFileSync, writeFileSync, existsSync } from "fs"
+import { dirname, join } from "path"
+import { fileURLToPath } from "url"
 import { spawn } from "child_process"
 import readline from "readline"
+import { getTokenFilePath, getClaudeConfigPath, ensureConfigDir } from "./paths.js"
+import { detectServerCommand, generateClaudeConfigEntry } from "./setup-config.js"
+
+// Resolve the directory that contains this script's built output (dist/)
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -20,12 +26,7 @@ async function setup() {
   console.log("==================================\n")
 
   // Check if already configured
-  const configDir =
-    process.platform === "win32"
-      ? join(process.env.APPDATA || join(homedir(), "AppData", "Roaming"), "microsoft-todo-mcp")
-      : join(homedir(), ".config", "microsoft-todo-mcp")
-
-  const tokenPath = join(configDir, "tokens.json")
+  const tokenPath = getTokenFilePath()
 
   if (existsSync(tokenPath)) {
     const answer = await question("Tokens already exist. Reconfigure? (y/N): ")
@@ -36,7 +37,7 @@ async function setup() {
   }
 
   // Check for Azure app credentials
-  let hasEnvFile = existsSync(".env")
+  const hasEnvFile = existsSync(".env")
 
   if (!hasEnvFile) {
     console.log("\n📋 Azure App Registration Required")
@@ -65,8 +66,12 @@ REDIRECT_URI=http://localhost:3000/callback
   console.log("\n🔐 Starting authentication flow...")
   console.log("A browser window will open. Please sign in with your Microsoft account.\n")
 
-  // Start the auth server
-  const authProcess = spawn("node", ["dist/auth-server.js"], {
+  // Ensure config dir exists so auth-server can write tokens
+  ensureConfigDir()
+
+  // Start the auth server, passing the token file path so it writes directly
+  const authServerJs = join(__dirname, "auth-server.js")
+  const authProcess = spawn("node", [authServerJs, "--token-file", tokenPath], {
     stdio: "inherit",
     shell: true,
   })
@@ -75,18 +80,17 @@ REDIRECT_URI=http://localhost:3000/callback
     if (code === 0) {
       console.log("\n✅ Authentication successful!")
 
-      // Check if tokens were created
-      const localTokens = join(process.cwd(), "tokens.json")
-      if (existsSync(localTokens)) {
-        // Move tokens to proper location and add client credentials
-        const tokens = JSON.parse(readFileSync(localTokens, "utf8"))
+      // Auth-server writes tokens directly — no move needed.
+      // Just read them back to confirm they exist with client credentials.
+      if (existsSync(tokenPath)) {
+        const tokens = JSON.parse(readFileSync(tokenPath, "utf8"))
         const env = readFileSync(".env", "utf8")
 
         const clientId = env.match(/CLIENT_ID=(.+)/)?.[1]
         const clientSecret = env.match(/CLIENT_SECRET=(.+)/)?.[1]
         const tenantId = env.match(/TENANT_ID=(.+)/)?.[1] || "organizations"
 
-        // Store with credentials for future refreshes
+        // Merge credentials into the token file for future refreshes
         const enhancedTokens = {
           ...tokens,
           clientId,
@@ -94,15 +98,10 @@ REDIRECT_URI=http://localhost:3000/callback
           tenantId,
         }
 
-        // Create directory if needed
-        mkdirSync(configDir, { recursive: true })
-
-        // Save to proper location
         writeFileSync(tokenPath, JSON.stringify(enhancedTokens, null, 2))
-
         console.log(`\n📁 Tokens saved to: ${tokenPath}`)
 
-        // Update Claude config
+        // Update Claude Desktop config
         await updateClaudeConfig()
 
         console.log("\n🎉 Setup complete! Microsoft To Do MCP is ready to use.")
@@ -117,23 +116,22 @@ REDIRECT_URI=http://localhost:3000/callback
 }
 
 async function updateClaudeConfig() {
-  const claudeConfigPath =
-    process.platform === "win32"
-      ? join(process.env.APPDATA || "", "Claude", "claude_desktop_config.json")
-      : process.platform === "darwin"
-        ? join(homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json")
-        : join(homedir(), ".config", "Claude", "claude_desktop_config.json")
+  const claudeConfigPath = getClaudeConfigPath()
+
+  // Detect server command based on the local dist/ directory
+  const serverCommand = detectServerCommand(__dirname)
+  console.log(`Detected server command: ${serverCommand.command} ${serverCommand.args.join(" ")}`)
+
+  const configEntry = generateClaudeConfigEntry(serverCommand)
+  // configEntry intentionally has no `env` property — tokens come from
+  // the platform-specific config dir, not from environment variables.
 
   if (!existsSync(claudeConfigPath)) {
     console.log("\n⚠️  Claude config not found. Add this to your Claude desktop config manually:")
     console.log(
       JSON.stringify(
         {
-          "microsoft-todo": {
-            command: "npx",
-            args: ["microsoft-todo-mcp-server"],
-            env: {},
-          },
+          "microsoft-todo": configEntry,
         },
         null,
         2,
@@ -141,6 +139,8 @@ async function updateClaudeConfig() {
     )
     return
   }
+
+  console.log(`Claude config path: ${claudeConfigPath}`)
 
   try {
     const config = JSON.parse(readFileSync(claudeConfigPath, "utf8"))
@@ -150,16 +150,13 @@ async function updateClaudeConfig() {
       config.mcpServers = {}
     }
 
-    config.mcpServers["microsoft-todo"] = {
-      command: "npx",
-      args: ["microsoft-todo-mcp-server"],
-      env: {}, // No need for tokens in env anymore!
-    }
+    config.mcpServers["microsoft-todo"] = configEntry
 
     writeFileSync(claudeConfigPath, JSON.stringify(config, null, 2))
     console.log("\n✅ Updated Claude Desktop configuration")
   } catch (error) {
-    console.error("\n⚠️  Could not update Claude config automatically:", error)
+    const msg = error instanceof Error ? error.message : String(error)
+    console.error(`\n⚠️  Could not update Claude config at ${claudeConfigPath}: ${msg}`)
   }
 }
 
