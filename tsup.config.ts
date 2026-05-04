@@ -4,10 +4,10 @@ export default defineConfig({
   entry: [
     'src/todo-index.ts',
     'src/cli.ts',
-    'src/create-mcp-config.ts',
-    'src/auth-server.ts',
-    'src/setup.ts',
-    'src/token-manager.ts'
+    'src/oauth-engine.ts',
+    'src/token-manager.ts',
+    'src/paths.ts',
+    'src/graph-client.ts',
   ],
   outDir: 'dist',
   format: ['esm'],
@@ -17,7 +17,6 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   dts: true,
-  external: ['dotenv'],
   esbuildOptions(options) {
     options.platform = 'node'
   }

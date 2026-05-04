@@ -1,12 +1,10 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod"
-import dotenv from "dotenv"
 import { tokenManager } from "./token-manager.js"
 import { makeGraphRequest, getAccessToken, MS_GRAPH_BASE, USER_AGENT } from "./graph-client.js"
-
-// Load environment variables
-dotenv.config()
+import { startAuthFlow, type AuthFlowResult } from "./auth-callback-server.js"
+import { OAuthConfigError } from "./oauth-engine.js"
 
 // Log the current working directory
 console.error("Current working directory:", process.cwd())
@@ -92,7 +90,7 @@ server.tool(
         content: [
           {
             type: "text",
-            text: "Not authenticated. Please run 'npx microsoft-todo-mcp-server setup' to authenticate with Microsoft.",
+            text: 'Not authenticated. Provide CLIENT_ID and CLIENT_SECRET via the MCP client\'s "env" field, then use the start-auth tool to authenticate with Microsoft.',
           },
         ],
       }
@@ -137,6 +135,59 @@ server.tool(
           {
             type: "text",
             text: `Authenticated. Token expires at ${expiryTime}.${accountMessage}${refreshFailureMessage}`,
+          },
+        ],
+      }
+    }
+  },
+)
+
+// Server tool to start the OAuth authentication flow
+server.tool(
+  "start-auth",
+  "Start the Microsoft OAuth authentication flow. Returns a URL to visit in your browser. After you complete authentication, tokens are saved automatically. Use this when you need to authenticate for the first time or when your tokens have expired.",
+  {},
+  async () => {
+    try {
+      const { authUrl, result } = await startAuthFlow()
+      const flowResult: AuthFlowResult = await result
+
+      if (flowResult.success) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Authentication successful! Your tokens have been saved. You can now use all Microsoft To Do tools.\n\nVisit this URL to authenticate:\n${authUrl}`,
+            },
+          ],
+        }
+      } else {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `${flowResult.message}\n\nVisit this URL to authenticate:\n${authUrl}`,
+            },
+          ],
+        }
+      }
+    } catch (err: unknown) {
+      if (err instanceof OAuthConfigError) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Authentication configuration error: ${err.message}. Please ensure CLIENT_ID and CLIENT_SECRET are set in your MCP client's "env" field.`,
+            },
+          ],
+        }
+      }
+      const msg = err instanceof Error ? err.message : String(err)
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Failed to start authentication: ${msg}`,
           },
         ],
       }
@@ -196,7 +247,7 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Failed to authenticate with Microsoft API",
+              text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
             },
           ],
         }
@@ -287,7 +338,7 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Failed to authenticate with Microsoft API",
+              text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
             },
           ],
         }
@@ -550,7 +601,7 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Failed to authenticate with Microsoft API",
+              text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
             },
           ],
         }
@@ -611,7 +662,7 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Failed to authenticate with Microsoft API",
+              text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
             },
           ],
         }
@@ -676,7 +727,7 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Failed to authenticate with Microsoft API",
+              text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
             },
           ],
         }
@@ -731,7 +782,7 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Failed to authenticate with Microsoft API",
+              text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
             },
           ],
         }
@@ -881,7 +932,7 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Failed to authenticate with Microsoft API",
+              text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
             },
           ],
         }
@@ -1013,7 +1064,7 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Failed to authenticate with Microsoft API",
+              text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
             },
           ],
         }
@@ -1152,7 +1203,7 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Failed to authenticate with Microsoft API",
+              text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
             },
           ],
         }
@@ -1202,7 +1253,7 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Failed to authenticate with Microsoft API",
+              text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
             },
           ],
         }
@@ -1296,7 +1347,7 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Failed to authenticate with Microsoft API",
+              text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
             },
           ],
         }
@@ -1369,7 +1420,7 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Failed to authenticate with Microsoft API",
+              text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
             },
           ],
         }
@@ -1456,7 +1507,7 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Failed to authenticate with Microsoft API",
+              text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
             },
           ],
         }
@@ -1517,7 +1568,7 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Failed to authenticate with Microsoft API",
+              text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
             },
           ],
         }
@@ -1652,7 +1703,7 @@ server.tool(
           content: [
             {
               type: "text",
-              text: "Failed to authenticate with Microsoft API",
+              text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
             },
           ],
         }

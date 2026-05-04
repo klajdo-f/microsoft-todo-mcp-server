@@ -98,7 +98,7 @@ export async function getAccessToken(): Promise<string | null> {
       return tokens.accessToken
     }
 
-    console.error("No valid tokens available")
+    console.error("No valid tokens available — user should run start-auth tool")
     return null
   } catch (error) {
     console.error("Error getting access token:", error)

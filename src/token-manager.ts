@@ -9,9 +9,6 @@ interface TokenData {
 }
 
 export interface StoredTokenData extends TokenData {
-  clientId?: string
-  clientSecret?: string
-  tenantId?: string
   lastRefreshError?: string
   lastRefreshAttempt?: number
 }
@@ -69,10 +66,10 @@ export class TokenManager {
   }
 
   async refreshToken(refreshToken: string): Promise<TokenData | null> {
-    // Get client credentials from stored tokens or environment
-    const clientId = this.currentTokens?.clientId || process.env.CLIENT_ID
-    const clientSecret = this.currentTokens?.clientSecret || process.env.CLIENT_SECRET
-    const tenantId = this.currentTokens?.tenantId || process.env.TENANT_ID || "organizations"
+    // Client credentials come exclusively from process.env (env-only model)
+    const clientId = process.env.CLIENT_ID
+    const clientSecret = process.env.CLIENT_SECRET
+    const tenantId = process.env.TENANT_ID || "organizations"
 
     if (!clientId || !clientSecret) {
       console.error("Missing client credentials for token refresh")
@@ -116,9 +113,6 @@ export class TokenManager {
         accessToken: data.access_token,
         refreshToken: data.refresh_token || refreshToken,
         expiresAt: Date.now() + data.expires_in * 1000 - 5 * 60 * 1000, // 5 min buffer
-        clientId,
-        clientSecret,
-        tenantId,
       }
 
       // Clear any previous error on success
@@ -172,25 +166,13 @@ TOKEN REFRESH FAILED - REAUTHENTICATION REQUIRED
 Your Microsoft To Do tokens have expired and could not be refreshed.
 
 To fix this:
-1. Open a new terminal
-2. Navigate to the microsoft-todo-mcp-server directory
-3. Run: pnpm run auth
-4. Complete the authentication in your browser
-5. Restart Claude Desktop to use the new tokens
+1. Use the "start-auth" MCP tool to re-authenticate
+2. Complete the authentication in your browser
+3. Your tokens will be refreshed automatically
 
 Your tokens are stored in: ${this.tokenFilePath}
 =================================================================
     `)
-  }
-
-  // Store client credentials with tokens for future refreshes
-  async storeCredentials(clientId: string, clientSecret: string, tenantId: string): Promise<void> {
-    if (this.currentTokens) {
-      this.currentTokens.clientId = clientId
-      this.currentTokens.clientSecret = clientSecret
-      this.currentTokens.tenantId = tenantId
-      this.saveTokens(this.currentTokens)
-    }
   }
 }
 

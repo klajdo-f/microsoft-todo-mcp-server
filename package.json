@@ -6,8 +6,6 @@
   "dependencies": {
     "@azure/msal-node": "^3.8.1",
     "@modelcontextprotocol/sdk": "^1.21.1",
-    "dotenv": "^16.6.1",
-    "express": "^5.1.0",
     "zod": "^3.25.76"
   },
   "scripts": {
@@ -17,10 +15,7 @@
     "build:win": "tsup && node -e \"console.log('Build complete')\"",
     "start": "node dist/todo-index.js",
     "cli": "node dist/cli.js",
-    "auth": "node dist/auth-server.js",
-    "setup": "node dist/setup.js",
     "dev": "pnpm run build && node dist/cli.js",
-    "create-config": "node dist/create-mcp-config.js",
     "format": "prettier --write \"src/**/*.{ts,js,json}\" \"*.{json,md}\"",
     "format:check": "prettier --check \"src/**/*.{ts,js,json}\" \"*.{json,md}\"",
     "lint": "pnpm run format:check",
@@ -29,8 +24,7 @@
     "check:fix": "pnpm run format && pnpm run typecheck",
     "ci": "pnpm run check && pnpm run build",
     "precommit": "pnpm run check:fix && pnpm run build",
-    "prepublishOnly": "pnpm run ci",
-    "postinstall": "echo 'Run: npx microsoft-todo-mcp-server setup' to configure"
+    "prepublishOnly": "pnpm run ci"
   },
   "repository": {
     "type": "git",
@@ -60,9 +54,7 @@
   "type": "module",
   "bin": {
     "microsoft-todo-mcp-server": "./dist/cli.js",
-    "mstodo": "./dist/cli.js",
-    "mstodo-config": "./dist/create-mcp-config.js",
-    "mstodo-setup": "./dist/setup.js"
+    "mstodo": "./dist/cli.js"
   },
   "files": [
     "dist"

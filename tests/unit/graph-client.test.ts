@@ -19,14 +19,21 @@ import { makeGraphRequest, getAccessToken } from "../../src/graph-client.js"
 // Helpers
 // ---------------------------------------------------------------------------
 
-function mockFetchSequence(responses: Array<{ ok: boolean; status?: number; json?: () => Promise<unknown>; text?: () => Promise<string> }>) {
+function mockFetchSequence(
+  responses: Array<{ ok: boolean; status?: number; json?: () => Promise<unknown>; text?: () => Promise<string> }>,
+) {
   let callIndex = 0
   vi.stubGlobal(
     "fetch",
     vi.fn().mockImplementation(() => {
       const resp = responses[callIndex++]
       if (!resp) {
-        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({}), text: () => Promise.resolve("") })
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({}),
+          text: () => Promise.resolve(""),
+        })
       }
       return Promise.resolve(resp)
     }),
@@ -77,7 +84,10 @@ describe("graph-client", () => {
         expiresAt: Date.now() + 3600_000,
       })
 
-      const result = await makeGraphRequest<{ id: string; title: string }>("https://graph.microsoft.com/v1.0/me/todo/lists", "old-token")
+      const result = await makeGraphRequest<{ id: string; title: string }>(
+        "https://graph.microsoft.com/v1.0/me/todo/lists",
+        "old-token",
+      )
 
       expect(fetch).toHaveBeenCalledTimes(2)
       expect(result).not.toBeNull()
@@ -96,17 +106,17 @@ describe("graph-client", () => {
         expiresAt: Date.now() + 3600_000,
       })
 
-      const result = await makeGraphRequest<{ id: string }>("https://graph.microsoft.com/v1.0/me/todo/lists", "same-token")
+      const result = await makeGraphRequest<{ id: string }>(
+        "https://graph.microsoft.com/v1.0/me/todo/lists",
+        "same-token",
+      )
 
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(result).toBeNull()
     })
 
     it("does not infinite loop on double 401", async () => {
-      mockFetchSequence([
-        makeTextResponse("Unauthorized", 401),
-        makeTextResponse("Unauthorized", 401),
-      ])
+      mockFetchSequence([makeTextResponse("Unauthorized", 401), makeTextResponse("Unauthorized", 401)])
       mockGetTokens.mockResolvedValue({
         accessToken: "new-token",
         refreshToken: "rt-456",
@@ -114,7 +124,10 @@ describe("graph-client", () => {
       })
 
       // makeGraphRequest catches errors and returns null for non-MailboxNotEnabled errors
-      const result = await makeGraphRequest<{ id: string }>("https://graph.microsoft.com/v1.0/me/todo/lists", "old-token")
+      const result = await makeGraphRequest<{ id: string }>(
+        "https://graph.microsoft.com/v1.0/me/todo/lists",
+        "old-token",
+      )
 
       expect(fetch).toHaveBeenCalledTimes(2)
       expect(result).toBeNull()
@@ -139,7 +152,10 @@ describe("graph-client", () => {
     it("returns data on successful initial request without refresh", async () => {
       mockFetchSequence([makeJsonResponse({ value: [{ id: "list-1" }] }, 200)])
 
-      const result = await makeGraphRequest<{ value: Array<{ id: string }> }>("https://graph.microsoft.com/v1.0/me/todo/lists", "at-123")
+      const result = await makeGraphRequest<{ value: Array<{ id: string }> }>(
+        "https://graph.microsoft.com/v1.0/me/todo/lists",
+        "at-123",
+      )
 
       expect(fetch).toHaveBeenCalledTimes(1)
       expect(mockGetTokens).not.toHaveBeenCalled()

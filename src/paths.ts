@@ -10,10 +10,7 @@ import { existsSync, mkdirSync } from "fs"
  */
 export function getConfigDir(): string {
   if (process.platform === "win32") {
-    return join(
-      process.env.APPDATA || join(homedir(), "AppData", "Roaming"),
-      "microsoft-todo-mcp",
-    )
+    return join(process.env.APPDATA || join(homedir(), "AppData", "Roaming"), "microsoft-todo-mcp")
   }
   return join(homedir(), ".config", "microsoft-todo-mcp")
 }
@@ -34,20 +31,10 @@ export function getTokenFilePath(): string {
  */
 export function getClaudeConfigPath(): string {
   if (process.platform === "win32") {
-    return join(
-      process.env.APPDATA || join(homedir(), "AppData", "Roaming"),
-      "Claude",
-      "claude_desktop_config.json",
-    )
+    return join(process.env.APPDATA || join(homedir(), "AppData", "Roaming"), "Claude", "claude_desktop_config.json")
   }
   if (process.platform === "darwin") {
-    return join(
-      homedir(),
-      "Library",
-      "Application Support",
-      "Claude",
-      "claude_desktop_config.json",
-    )
+    return join(homedir(), "Library", "Application Support", "Claude", "claude_desktop_config.json")
   }
   return join(homedir(), ".config", "Claude", "claude_desktop_config.json")
 }

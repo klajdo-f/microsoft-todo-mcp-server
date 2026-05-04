@@ -41,9 +41,6 @@ const VALID_TOKENS = {
   accessToken: "at-123",
   refreshToken: "rt-456",
   expiresAt: Date.now() + 3600_000,
-  clientId: "cid",
-  clientSecret: "csec",
-  tenantId: "tenant1",
 }
 
 const EXPIRED_TOKENS = {
@@ -150,6 +147,9 @@ describe("TokenManager", () => {
     // -----------------------------------------------------------------------
     it("triggers a proactive refresh when tokens are expired", async () => {
       mockTokenFile(EXPIRED_TOKENS)
+      process.env.CLIENT_ID = "env-cid"
+      process.env.CLIENT_SECRET = "env-csec"
+      process.env.TENANT_ID = "env-tenant"
       mockFetchSuccess(REFRESH_RESPONSE)
 
       const result = await tm.getTokens()
@@ -211,8 +211,11 @@ describe("TokenManager", () => {
   describe("refreshToken", () => {
     it("calls the Microsoft token endpoint with correct form data", async () => {
       mockFetchSuccess(REFRESH_RESPONSE)
+      process.env.CLIENT_ID = "env-cid"
+      process.env.CLIENT_SECRET = "env-csec"
+      process.env.TENANT_ID = "env-tenant"
 
-      // Prime currentTokens so clientId/clientSecret are available
+      // Prime currentTokens
       mockTokenFile(VALID_TOKENS)
       await tm.getTokens() // loads tokens into this.currentTokens
 
@@ -220,19 +223,22 @@ describe("TokenManager", () => {
 
       expect(fetch).toHaveBeenCalledTimes(1)
       const [url, options] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0]
-      expect(url).toBe("https://login.microsoftonline.com/tenant1/oauth2/v2.0/token")
+      expect(url).toBe("https://login.microsoftonline.com/env-tenant/oauth2/v2.0/token")
       expect(options.method).toBe("POST")
 
       // Verify form body contains required fields
       const body = options.body as URLSearchParams
-      expect(body.get("client_id")).toBe("cid")
-      expect(body.get("client_secret")).toBe("csec")
+      expect(body.get("client_id")).toBe("env-cid")
+      expect(body.get("client_secret")).toBe("env-csec")
       expect(body.get("refresh_token")).toBe("rt-456")
       expect(body.get("grant_type")).toBe("refresh_token")
     })
 
     it("saves new tokens on successful refresh", async () => {
       mockFetchSuccess(REFRESH_RESPONSE)
+      process.env.CLIENT_ID = "env-cid"
+      process.env.CLIENT_SECRET = "env-csec"
+      process.env.TENANT_ID = "env-tenant"
       mockTokenFile(VALID_TOKENS)
       await tm.getTokens()
 
@@ -244,7 +250,7 @@ describe("TokenManager", () => {
       expect(writeFileSync).toHaveBeenCalled()
     })
 
-    it("uses env vars as fallback for client credentials when not in token file", async () => {
+    it("reads client credentials from env vars", async () => {
       const tokensWithoutCreds = {
         accessToken: "at-123",
         refreshToken: "rt-456",
@@ -269,6 +275,9 @@ describe("TokenManager", () => {
     // refreshToken — failure path
     // -----------------------------------------------------------------------
     it("persists lastRefreshError and lastRefreshAttempt on HTTP failure", async () => {
+      process.env.CLIENT_ID = "env-cid"
+      process.env.CLIENT_SECRET = "env-csec"
+      process.env.TENANT_ID = "env-tenant"
       mockTokenFile(VALID_TOKENS)
       await tm.getTokens()
       mockFetchFailure(400, '{"error":"invalid_grant"}')
@@ -288,6 +297,9 @@ describe("TokenManager", () => {
     })
 
     it("persists lastRefreshError and lastRefreshAttempt on network error", async () => {
+      process.env.CLIENT_ID = "env-cid"
+      process.env.CLIENT_SECRET = "env-csec"
+      process.env.TENANT_ID = "env-tenant"
       mockTokenFile(VALID_TOKENS)
       await tm.getTokens()
       mockFetchNetworkError(new Error("ECONNREFUSED"))

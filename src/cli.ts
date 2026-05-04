@@ -1,20 +1,25 @@
 #!/usr/bin/env node
 
 import { startServer } from "./todo-index.js"
-import { tokenManager } from "./token-manager.js"
 
 /**
- * CLI entry point. Checks for valid tokens via TokenManager and starts the
- * MCP server, or exits with an actionable error when no tokens are found.
+ * CLI entry point. Checks for OAuth client credentials (CLIENT_ID and
+ * CLIENT_SECRET) in process.env and starts the MCP server, or exits with an
+ * actionable error when credentials are missing. The server starts even when
+ * no tokens are present so the start-auth MCP tool is available.
  */
 export async function runCli(): Promise<void> {
-  const tokens = await tokenManager.getTokens()
+  const missing: string[] = []
+  if (!process.env.CLIENT_ID) missing.push("CLIENT_ID")
+  if (!process.env.CLIENT_SECRET) missing.push("CLIENT_SECRET")
 
-  if (!tokens) {
+  if (missing.length > 0) {
+    const list = missing.join(" and ")
     console.error(
-      "Microsoft To Do MCP server: no tokens found. Run `npx mstodo-setup` to authenticate, then restart."
+      `Microsoft To Do MCP server: missing required credential${missing.length > 1 ? "s" : ""}: ${list}. ` +
+        `Provide them via the MCP client's "env" field in your server configuration.`,
     )
-    throw new Error("No tokens available — authentication required")
+    throw new Error(`Missing required credential(s): ${list}`)
   }
 
   await startServer()
