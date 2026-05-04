@@ -13,12 +13,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import * as checklistService from "../../application/checklist-service.js"
 import type { ChecklistItemFields } from "../../application/checklist-service.js"
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const NOT_AUTHENTICATED = "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft."
+import { handleToolError } from "../error-handler.js"
 
 // ---------------------------------------------------------------------------
 // Tool registration
@@ -38,12 +33,6 @@ export function registerChecklistTools(server: McpServer): void {
     async ({ listId, taskId }) => {
       try {
         const response = await checklistService.getChecklistItems(listId, taskId)
-
-        if (response === null) {
-          return {
-            content: [{ type: "text", text: NOT_AUTHENTICATED }],
-          }
-        }
 
         const { taskTitle, items } = response
 
@@ -79,9 +68,7 @@ export function registerChecklistTools(server: McpServer): void {
           ],
         }
       } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error fetching checklist items: ${error}` }],
-        }
+        return handleToolError(error)
       }
     },
   )
@@ -102,12 +89,6 @@ export function registerChecklistTools(server: McpServer): void {
       try {
         const response = await checklistService.createChecklistItem(listId, taskId, displayName, isChecked)
 
-        if (!response) {
-          return {
-            content: [{ type: "text", text: NOT_AUTHENTICATED }],
-          }
-        }
-
         return {
           content: [
             {
@@ -117,9 +98,7 @@ export function registerChecklistTools(server: McpServer): void {
           ],
         }
       } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error creating checklist item: ${error}` }],
-        }
+        return handleToolError(error)
       }
     },
   )
@@ -157,12 +136,6 @@ export function registerChecklistTools(server: McpServer): void {
 
         const response = await checklistService.updateChecklistItem(listId, taskId, checklistItemId, fields)
 
-        if (!response) {
-          return {
-            content: [{ type: "text", text: NOT_AUTHENTICATED }],
-          }
-        }
-
         const statusText = response.isChecked ? "Checked" : "Not checked"
 
         return {
@@ -174,9 +147,7 @@ export function registerChecklistTools(server: McpServer): void {
           ],
         }
       } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error updating checklist item: ${error}` }],
-        }
+        return handleToolError(error)
       }
     },
   )
@@ -194,13 +165,7 @@ export function registerChecklistTools(server: McpServer): void {
     },
     async ({ listId, taskId, checklistItemId }) => {
       try {
-        const result = await checklistService.deleteChecklistItem(listId, taskId, checklistItemId)
-
-        if (result === null) {
-          return {
-            content: [{ type: "text", text: NOT_AUTHENTICATED }],
-          }
-        }
+        await checklistService.deleteChecklistItem(listId, taskId, checklistItemId)
 
         return {
           content: [
@@ -211,9 +176,7 @@ export function registerChecklistTools(server: McpServer): void {
           ],
         }
       } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error deleting checklist item: ${error}` }],
-        }
+        return handleToolError(error)
       }
     },
   )

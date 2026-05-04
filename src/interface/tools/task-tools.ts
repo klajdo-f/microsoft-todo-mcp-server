@@ -13,12 +13,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import * as taskService from "../../application/task-service.js"
 import type { TaskFields } from "../../application/task-service.js"
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const NOT_AUTHENTICATED = "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft."
+import { handleToolError } from "../error-handler.js"
 
 // ---------------------------------------------------------------------------
 // Tool registration
@@ -43,12 +38,6 @@ export function registerTaskTools(server: McpServer): void {
     async ({ listId, filter, select, orderby, top, skip, count }) => {
       try {
         const response = await taskService.getTasks(listId, { filter, select, orderby, top, skip, count })
-
-        if (response === null) {
-          return {
-            content: [{ type: "text", text: NOT_AUTHENTICATED }],
-          }
-        }
 
         const tasks = response.tasks
         if (tasks.length === 0) {
@@ -103,9 +92,7 @@ export function registerTaskTools(server: McpServer): void {
           ],
         }
       } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error fetching tasks: ${error}` }],
-        }
+        return handleToolError(error)
       }
     },
   )
@@ -158,12 +145,6 @@ export function registerTaskTools(server: McpServer): void {
 
         const response = await taskService.createTask(listId, fields)
 
-        if (!response) {
-          return {
-            content: [{ type: "text", text: NOT_AUTHENTICATED }],
-          }
-        }
-
         return {
           content: [
             {
@@ -173,9 +154,7 @@ export function registerTaskTools(server: McpServer): void {
           ],
         }
       } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error creating task: ${error}` }],
-        }
+        return handleToolError(error)
       }
     },
   )
@@ -229,8 +208,8 @@ export function registerTaskTools(server: McpServer): void {
         }
 
         // Check that at least one property was explicitly provided.
-        // The application service returns null for an empty update body,
-        // but we want a specific message here.
+        // The application service throws ValidationError for empty update
+        // bodies, but we short-circuit here for a friendlier message.
         const hasUpdate =
           title !== undefined ||
           body !== undefined ||
@@ -255,12 +234,6 @@ export function registerTaskTools(server: McpServer): void {
 
         const response = await taskService.updateTask(listId, taskId, fields)
 
-        if (!response) {
-          return {
-            content: [{ type: "text", text: NOT_AUTHENTICATED }],
-          }
-        }
-
         return {
           content: [
             {
@@ -270,9 +243,7 @@ export function registerTaskTools(server: McpServer): void {
           ],
         }
       } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error updating task: ${error}` }],
-        }
+        return handleToolError(error)
       }
     },
   )
@@ -289,13 +260,7 @@ export function registerTaskTools(server: McpServer): void {
     },
     async ({ listId, taskId }) => {
       try {
-        const result = await taskService.deleteTask(listId, taskId)
-
-        if (result === null) {
-          return {
-            content: [{ type: "text", text: NOT_AUTHENTICATED }],
-          }
-        }
+        await taskService.deleteTask(listId, taskId)
 
         return {
           content: [
@@ -306,9 +271,7 @@ export function registerTaskTools(server: McpServer): void {
           ],
         }
       } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error deleting task: ${error}` }],
-        }
+        return handleToolError(error)
       }
     },
   )

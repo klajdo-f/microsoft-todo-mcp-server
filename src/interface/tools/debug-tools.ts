@@ -9,6 +9,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import { makeGraphRequest, getAccessToken, MS_GRAPH_BASE } from "../../infrastructure/graph-client.js"
 import type { TaskList, Task } from "../../domain/entities.js"
+import { handleToolError } from "../error-handler.js"
 
 // ---------------------------------------------------------------------------
 // Tool registration
@@ -38,16 +39,6 @@ export function registerDebugTools(server: McpServer): void {
     async ({ sourceListId, targetListId, olderThanDays, dryRun }) => {
       try {
         const token = await getAccessToken()
-        if (!token) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
-              },
-            ],
-          }
-        }
 
         // Calculate cutoff date
         const cutoffDate = new Date()
@@ -59,19 +50,10 @@ export function registerDebugTools(server: McpServer): void {
           token,
         )
 
-        if (!tasksResponse || !tasksResponse.value) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "Failed to retrieve tasks from source list",
-              },
-            ],
-          }
-        }
+        const allTasks = tasksResponse?.value || []
 
         // Filter tasks older than cutoff
-        const tasksToArchive = tasksResponse.value.filter((task) => {
+        const tasksToArchive = allTasks.filter((task) => {
           if (!task.completedDateTime?.dateTime) return false
           const completedDate = new Date(task.completedDateTime.dateTime)
           return completedDate < cutoffDate
@@ -110,7 +92,7 @@ export function registerDebugTools(server: McpServer): void {
         for (const task of tasksToArchive) {
           try {
             // Create task in target list
-            const createResponse = await makeGraphRequest(
+            await makeGraphRequest(
               `${MS_GRAPH_BASE}/me/todo/lists/${targetListId}/tasks`,
               token,
               "POST",
@@ -126,13 +108,9 @@ export function registerDebugTools(server: McpServer): void {
               },
             )
 
-            if (createResponse) {
-              // Delete from source list
-              await makeGraphRequest(`${MS_GRAPH_BASE}/me/todo/lists/${sourceListId}/tasks/${task.id}`, token, "DELETE")
-              successCount++
-            } else {
-              failedTasks.push(task.title)
-            }
+            // Delete from source list
+            await makeGraphRequest(`${MS_GRAPH_BASE}/me/todo/lists/${sourceListId}/tasks/${task.id}`, token, "DELETE")
+            successCount++
           } catch (error) {
             failedTasks.push(task.title)
           }
@@ -151,14 +129,7 @@ export function registerDebugTools(server: McpServer): void {
 
         return { content: [{ type: "text", text: result }] }
       } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error archiving tasks: ${error}`,
-            },
-          ],
-        }
+        return handleToolError(error)
       }
     },
   )
@@ -177,16 +148,6 @@ export function registerDebugTools(server: McpServer): void {
     async ({ testType }) => {
       try {
         const token = await getAccessToken()
-        if (!token) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft.",
-              },
-            ],
-          }
-        }
 
         let results = "🔍 Graph API Exploration Results\n" + "=".repeat(50) + "\n\n"
 
@@ -332,14 +293,7 @@ export function registerDebugTools(server: McpServer): void {
           ],
         }
       } catch (error) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Error during Graph API exploration: ${error}`,
-            },
-          ],
-        }
+        return handleToolError(error)
       }
     },
   )

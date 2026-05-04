@@ -11,6 +11,7 @@ import { getAccessToken, MS_GRAPH_BASE } from "../../infrastructure/graph-client
 import { startAuthFlow } from "../../auth-callback-server.js"
 import { OAuthConfigError } from "../../oauth-engine.js"
 import { openBrowser } from "../../open-browser.js"
+import { handleToolError } from "../error-handler.js"
 
 // ---------------------------------------------------------------------------
 // Helper: personal-account detection
@@ -209,15 +210,7 @@ export function registerAuthTools(server: McpServer): void {
             ],
           }
         }
-        const msg = err instanceof Error ? err.message : String(err)
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Failed to start authentication: ${msg}`,
-            },
-          ],
-        }
+        return handleToolError(err)
       }
     },
   )

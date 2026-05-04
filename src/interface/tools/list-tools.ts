@@ -13,12 +13,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import * as listService from "../../application/list-service.js"
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const NOT_AUTHENTICATED = "Not authenticated. Please run the start-auth tool first to authenticate with Microsoft."
+import { handleToolError } from "../error-handler.js"
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -134,12 +129,6 @@ export function registerListTools(server: McpServer): void {
       try {
         const lists = await listService.getLists()
 
-        if (lists === null) {
-          return {
-            content: [{ type: "text", text: NOT_AUTHENTICATED }],
-          }
-        }
-
         if (lists.length === 0) {
           return {
             content: [{ type: "text", text: "No task lists found." }],
@@ -168,9 +157,7 @@ export function registerListTools(server: McpServer): void {
           content: [{ type: "text", text: `Your task lists:\n\n${formattedLists.join("\n")}` }],
         }
       } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error fetching task lists: ${error}` }],
-        }
+        return handleToolError(error)
       }
     },
   )
@@ -191,12 +178,6 @@ export function registerListTools(server: McpServer): void {
     async ({ includeIds, groupBy }) => {
       try {
         const lists = await listService.getLists()
-
-        if (lists === null) {
-          return {
-            content: [{ type: "text", text: NOT_AUTHENTICATED }],
-          }
-        }
 
         if (lists.length === 0) {
           return {
@@ -293,9 +274,7 @@ export function registerListTools(server: McpServer): void {
 
         return { content: [{ type: "text", text: output }] }
       } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error fetching organized task lists: ${error}` }],
-        }
+        return handleToolError(error)
       }
     },
   )
@@ -313,12 +292,6 @@ export function registerListTools(server: McpServer): void {
       try {
         const response = await listService.createList(displayName)
 
-        if (!response) {
-          return {
-            content: [{ type: "text", text: NOT_AUTHENTICATED }],
-          }
-        }
-
         return {
           content: [
             {
@@ -328,9 +301,7 @@ export function registerListTools(server: McpServer): void {
           ],
         }
       } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error creating task list: ${error}` }],
-        }
+        return handleToolError(error)
       }
     },
   )
@@ -349,12 +320,6 @@ export function registerListTools(server: McpServer): void {
       try {
         const response = await listService.updateList(listId, displayName)
 
-        if (!response) {
-          return {
-            content: [{ type: "text", text: NOT_AUTHENTICATED }],
-          }
-        }
-
         return {
           content: [
             {
@@ -364,9 +329,7 @@ export function registerListTools(server: McpServer): void {
           ],
         }
       } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error updating task list: ${error}` }],
-        }
+        return handleToolError(error)
       }
     },
   )
@@ -382,13 +345,7 @@ export function registerListTools(server: McpServer): void {
     },
     async ({ listId }) => {
       try {
-        const result = await listService.deleteList(listId)
-
-        if (result === null) {
-          return {
-            content: [{ type: "text", text: NOT_AUTHENTICATED }],
-          }
-        }
+        await listService.deleteList(listId)
 
         return {
           content: [
@@ -399,9 +356,7 @@ export function registerListTools(server: McpServer): void {
           ],
         }
       } catch (error) {
-        return {
-          content: [{ type: "text", text: `Error deleting task list: ${error}` }],
-        }
+        return handleToolError(error)
       }
     },
   )
