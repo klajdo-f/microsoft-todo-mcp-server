@@ -165,11 +165,31 @@ server.tool(
           console.error("[start-auth] Auth flow error:", err)
         })
 
+      // Emit an OSC 8 hyperlink to stderr for terminal-native clickability
+      // (supported by Windows Terminal >= 1.4, iTerm2, GNOME Terminal, etc.)
+      const osc8Open = "\u001b]8;;"
+      const osc8Close = "\u0007"
+      console.error(
+        `[start-auth] ${osc8Open}${authUrl}${osc8Close}🔗 Click here to authenticate${osc8Open}${osc8Close}`,
+      )
+
       return {
         content: [
           {
             type: "text",
-            text: `Please visit this URL in your browser to authenticate with Microsoft:\n\n${authUrl}\n\nAfter you complete authentication, your tokens will be saved automatically. You can verify your status with the auth-status tool.`,
+            text: [
+              "Open this URL in your browser to authenticate with Microsoft:",
+              "",
+              `[Click to authenticate](${authUrl})`,
+              "",
+              "Or copy and paste the full URL below:",
+              "```",
+              authUrl,
+              "```",
+              "",
+              "After you complete authentication, your tokens will be saved automatically.",
+              "You can verify your status with the auth-status tool.",
+            ].join("\n"),
           },
         ],
       }
