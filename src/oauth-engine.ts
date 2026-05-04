@@ -63,14 +63,14 @@ export class OAuthExchangeError extends Error {
  * @throws {OAuthConfigError} if CLIENT_ID or CLIENT_SECRET is missing.
  */
 export function createOAuthEngine(options?: {
-  /** Override redirect URI (defaults to `REDIRECT_URI` env or `http://localhost:3000/callback`). */
+  /** Override redirect URI (defaults to `REDIRECT_URI` env or `http://localhost:4040/callback`). */
   redirectUri?: string
 }) {
   // --- Validate required env vars ---
   const clientId = process.env.CLIENT_ID
   const clientSecret = process.env.CLIENT_SECRET
   const tenantId = process.env.TENANT_ID || "organizations"
-  const redirectUri = options?.redirectUri || process.env.REDIRECT_URI || "http://localhost:3000/callback"
+  const redirectUri = options?.redirectUri || process.env.REDIRECT_URI || "http://localhost:4040/callback"
 
   const missing: string[] = []
   if (!clientId) missing.push("CLIENT_ID")

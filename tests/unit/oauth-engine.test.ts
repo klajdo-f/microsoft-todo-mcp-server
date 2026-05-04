@@ -132,10 +132,10 @@ describe("oauth-engine", () => {
       expect(engine.redirectUri).toBe("http://custom:8080/cb")
     })
 
-    it("defaults redirect URI to http://localhost:3000/callback when env is unset", () => {
+    it("defaults redirect URI to http://localhost:4040/callback when env is unset", () => {
       setEnv({ CLIENT_ID: "c", CLIENT_SECRET: "s" })
       const engine = createOAuthEngine()
-      expect(engine.redirectUri).toBe("http://localhost:3000/callback")
+      expect(engine.redirectUri).toBe("http://localhost:4040/callback")
     })
   })
 

@@ -3,7 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod"
 import { tokenManager } from "./token-manager.js"
 import { makeGraphRequest, getAccessToken, MS_GRAPH_BASE, USER_AGENT } from "./graph-client.js"
-import { startAuthFlow, type AuthFlowResult } from "./auth-callback-server.js"
+import { startAuthFlow } from "./auth-callback-server.js"
 import { OAuthConfigError } from "./oauth-engine.js"
 
 // Log the current working directory
@@ -149,27 +149,29 @@ server.tool(
   {},
   async () => {
     try {
-      const { authUrl, result } = await startAuthFlow()
-      const flowResult: AuthFlowResult = await result
+      const { authUrl, result } = await startAuthFlow({ timeoutMs: 600_000 })
 
-      if (flowResult.success) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Authentication successful! Your tokens have been saved. You can now use all Microsoft To Do tools.\n\nVisit this URL to authenticate:\n${authUrl}`,
-            },
-          ],
-        }
-      } else {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `${flowResult.message}\n\nVisit this URL to authenticate:\n${authUrl}`,
-            },
-          ],
-        }
+      // Run the auth flow in the background so the user gets the URL
+      // immediately instead of blocking for the entire duration.
+      result
+        .then((flowResult) => {
+          if (flowResult.success) {
+            console.error("[start-auth] Authentication completed successfully.")
+          } else {
+            console.error(`[start-auth] Authentication failed: ${flowResult.message}`)
+          }
+        })
+        .catch((err: unknown) => {
+          console.error("[start-auth] Auth flow error:", err)
+        })
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Please visit this URL in your browser to authenticate with Microsoft:\n\n${authUrl}\n\nAfter you complete authentication, your tokens will be saved automatically. You can verify your status with the auth-status tool.`,
+          },
+        ],
       }
     } catch (err: unknown) {
       if (err instanceof OAuthConfigError) {
@@ -1883,12 +1885,4 @@ export async function startServer(config?: ServerConfig): Promise<void> {
     console.error("Error starting server:", error)
     throw error
   }
-}
-
-// Main entry point when executed directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  startServer().catch((error) => {
-    console.error("Fatal error in main():", error)
-    process.exit(1)
-  })
 }

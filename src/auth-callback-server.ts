@@ -61,14 +61,14 @@ function cleanupActiveFlow(): void {
 
 /**
  * Extract the port from a redirect URI string.
- * Defaults to 3000 if parsing fails.
+ * Defaults to 4040 if parsing fails.
  */
 function portFromRedirectUri(uri: string): number {
   try {
     const url = new URL(uri)
-    return parseInt(url.port, 10) || 3000
+    return parseInt(url.port, 10) || 4040
   } catch {
-    return 3000
+    return 4040
   }
 }
 
@@ -130,14 +130,18 @@ export async function startAuthFlow(
     const port = portFromRedirectUri(redirectUri)
 
     const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+      console.error(`[start-auth] HTTP request received: ${req.method} ${req.url}`)
       // Only handle the callback path
       if (!req.url?.startsWith("/callback")) {
+        console.error(`[start-auth] Request path does not match /callback — returning 404`)
         res.writeHead(404)
         res.end("Not found")
         return
       }
+      console.error(`[start-auth] Callback path matched, parsing query params…`)
 
       const params = parseQuery(req.url)
+      console.error(`[start-auth] Parsed params: ${JSON.stringify(params)}`)
       const code = params["code"]
       const error = params["error"]
       const errorDescription = params["error_description"]

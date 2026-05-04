@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { startServer } from "./todo-index.js"
+import { pathToFileURL } from "url"
 
 /**
  * CLI entry point. Checks for OAuth client credentials (CLIENT_ID and
@@ -26,8 +27,9 @@ export async function runCli(): Promise<void> {
 }
 
 // Only run when executed directly (not when imported by tests)
-if (import.meta.url === `file://${process.argv[1]}`) {
-  runCli().catch(() => {
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  runCli().catch((error) => {
+    console.error("Fatal error starting server:", error)
     process.exit(1)
   })
 }

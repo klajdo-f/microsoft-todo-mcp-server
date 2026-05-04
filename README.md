@@ -61,7 +61,7 @@ Before using the server, you need to register an application in Azure:
    - **Accounts in this organizational directory only** — Single tenant
    - **Accounts in any organizational directory** — Multi-tenant
    - **Accounts in any organizational directory and personal Microsoft accounts** — Both work and personal accounts
-5. Set the **Redirect URI** to `http://localhost:3000/callback`
+5. Set the **Redirect URI** to `http://localhost:4040/callback`
 6. After creation, go to **Certificates & secrets** → create a new client secret
 7. Go to **API permissions** → add the following **Microsoft Graph > Delegated permissions**:
    - `Tasks.Read`
@@ -73,7 +73,7 @@ Save your **Application (client) ID** and **Client Secret** — you'll need them
 
 ## MCP Client Configuration
 
-Configure the server in your MCP client using environment variables for credentials. The server requires three environment variables: `CLIENT_ID`, `CLIENT_SECRET`, and `TENANT_ID`. A fourth optional variable `REDIRECT_URI` defaults to `http://localhost:3000/callback`.
+Configure the server in your MCP client using environment variables for credentials. The server requires three environment variables: `CLIENT_ID`, `CLIENT_SECRET`, and `TENANT_ID`. A fourth optional variable `REDIRECT_URI` defaults to `http://localhost:4040/callback`.
 
 ### TENANT_ID Options
 
@@ -295,7 +295,7 @@ The server requires `CLIENT_ID` and `CLIENT_SECRET` in your MCP client's `env` c
 
 **Token acquisition failures**
 
-- Ensure your Azure App's redirect URI matches exactly: `http://localhost:3000/callback`
+- Ensure your Azure App's redirect URI matches exactly: `http://localhost:4040/callback`
 - Check that the required Graph API permissions (`Tasks.Read`, `Tasks.ReadWrite`, `User.Read`) are added and consented
 - For organizational accounts, admin consent may be required
 

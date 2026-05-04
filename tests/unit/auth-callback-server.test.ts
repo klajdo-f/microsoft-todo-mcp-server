@@ -17,7 +17,7 @@ vi.mock("../../src/oauth-engine.js", () => ({
       refreshToken: "rt-test",
       expiresAt: Date.now() + 3600 * 1000,
     }),
-    redirectUri: "http://localhost:3000/callback",
+    redirectUri: "http://localhost:4040/callback",
     tenantId: "organizations",
   })),
   OAuthConfigError: class OAuthConfigError extends Error {
