@@ -8,7 +8,7 @@ A Model Context Protocol (MCP) server that enables AI assistants to interact wit
 ## Features
 
 - **17 MCP Tools**: Complete task management including lists, tasks, checklist items, and organization
-- **In-Band Authentication**: Authenticate directly through the `start-auth` MCP tool — no separate CLI steps
+- **In-Band Authentication**: Authenticate directly through an MCP tool — use `start-auth` (browser-based) or `start-device-auth` (headless/terminal), selected via the `AUTH_FLOW` environment variable
 - **Universal Client Support**: Configure once with environment variables, works in every MCP client
 - **Automatic Token Refresh**: Tokens are refreshed 5 minutes before expiration, transparently
 - **Microsoft Graph API Integration**: Direct integration with Microsoft's official API v1.0
@@ -73,7 +73,28 @@ Save your **Application (client) ID** and **Client Secret** — you'll need them
 
 ## MCP Client Configuration
 
-Configure the server in your MCP client using environment variables for credentials. The server requires three environment variables: `CLIENT_ID`, `CLIENT_SECRET`, and `TENANT_ID`. A fourth optional variable `REDIRECT_URI` defaults to `http://localhost:4040/callback`.
+Configure the server in your MCP client using environment variables for credentials. The required variables depend on the authentication flow you choose.
+
+### Authentication Flows
+
+The server supports two authentication flows, selected via the `AUTH_FLOW` environment variable:
+
+| Variable    | Values                              | Default              | Description                               |
+| ----------- | ----------------------------------- | -------------------- | ----------------------------------------- |
+| `AUTH_FLOW` | `authorization_code`, `device_code` | `authorization_code` | Selects the OAuth flow for authentication |
+
+- **`authorization_code`** (default) — Browser-based flow. Requires `CLIENT_ID`, `CLIENT_SECRET`, and `TENANT_ID`. Best for desktop environments where a browser is available.
+- **`device_code`** — Headless flow for terminal-only or remote environments. Requires only `CLIENT_ID`. No client secret needed. The server displays a user code and verification URL for sign-in on any device.
+
+### Environment Variables
+
+| Variable        | Required                     | Description                                                       |
+| --------------- | ---------------------------- | ----------------------------------------------------------------- |
+| `CLIENT_ID`     | Yes                          | Azure App Registration application (client) ID                    |
+| `CLIENT_SECRET` | Authorization code flow only | Client secret from Azure App Registration                         |
+| `TENANT_ID`     | Authorization code flow only | Tenant identifier (see table below)                               |
+| `AUTH_FLOW`     | No                           | `authorization_code` (default) or `device_code`                   |
+| `REDIRECT_URI`  | No                           | OAuth callback URL (defaults to `http://localhost:4040/callback`) |
 
 ### TENANT_ID Options
 
@@ -84,7 +105,11 @@ Configure the server in your MCP client using environment variables for credenti
 | `common`         | Both organizational and personal accounts                      |
 | `your-tenant-id` | Single-tenant (use your Azure AD tenant GUID)                  |
 
-### Claude Desktop
+### Authorization Code Flow Configuration
+
+Use this configuration for desktop environments with browser access:
+
+#### Claude Desktop
 
 Add to your Claude Desktop configuration file:
 
@@ -108,7 +133,7 @@ Add to your Claude Desktop configuration file:
 }
 ```
 
-### Cursor
+#### Cursor
 
 Add to your Cursor MCP configuration:
 
@@ -131,7 +156,7 @@ Add to your Cursor MCP configuration:
 }
 ```
 
-### Windsurf
+#### Windsurf
 
 Add to your Windsurf MCP configuration (usually `~/.codeium/windsurf/mcp_config.json`):
 
@@ -145,6 +170,63 @@ Add to your Windsurf MCP configuration (usually `~/.codeium/windsurf/mcp_config.
         "CLIENT_ID": "your_client_id",
         "CLIENT_SECRET": "your_client_secret",
         "TENANT_ID": "organizations"
+      }
+    }
+  }
+}
+```
+
+### Device Code Flow Configuration
+
+Use this configuration for headless, terminal-only, or remote environments. Only `CLIENT_ID` is required — no client secret.
+
+> **Prerequisite:** In your Azure App Registration, go to **Authentication** → enable **Allow public client flows**.
+
+#### Claude Desktop
+
+```json
+{
+  "mcpServers": {
+    "microsoftTodo": {
+      "command": "npx",
+      "args": ["-y", "microsoft-todo-mcp-server"],
+      "env": {
+        "CLIENT_ID": "your_client_id",
+        "AUTH_FLOW": "device_code"
+      }
+    }
+  }
+}
+```
+
+#### Cursor
+
+```json
+{
+  "mcpServers": {
+    "microsoftTodo": {
+      "command": "npx",
+      "args": ["-y", "microsoft-todo-mcp-server"],
+      "env": {
+        "CLIENT_ID": "your_client_id",
+        "AUTH_FLOW": "device_code"
+      }
+    }
+  }
+}
+```
+
+#### Windsurf
+
+```json
+{
+  "mcpServers": {
+    "microsoftTodo": {
+      "command": "npx",
+      "args": ["-y", "microsoft-todo-mcp-server"],
+      "env": {
+        "CLIENT_ID": "your_client_id",
+        "AUTH_FLOW": "device_code"
       }
     }
   }
@@ -173,7 +255,9 @@ If you cloned the repo and built locally, point the `command` at the built CLI:
 
 ## First-Time Authentication
 
-After adding the server to your MCP client, authenticate with Microsoft using the built-in `start-auth` tool:
+After adding the server to your MCP client, authenticate with Microsoft. The authentication method depends on your `AUTH_FLOW` setting:
+
+### Authorization Code Flow (`AUTH_FLOW=authorization_code`, default)
 
 1. **Ask your AI assistant** to run the `start-auth` tool (e.g., _"Run start-auth to authenticate with Microsoft"_)
 2. The tool will return an **authentication URL** — open it in your browser
@@ -181,20 +265,32 @@ After adding the server to your MCP client, authenticate with Microsoft using th
 4. The server captures the OAuth callback automatically and **saves your tokens**
 5. You're ready to use all Microsoft To Do tools
 
+### Device Code Flow (`AUTH_FLOW=device_code`)
+
+1. **Ask your AI assistant** to run the `start-device-auth` tool
+2. The tool returns a **user code** and a **verification URL**
+3. Open the verification URL on any device (browser, phone, etc.)
+4. **Enter the user code** when prompted and sign in with your Microsoft account
+5. The server polls in the background and **saves your tokens** automatically once you complete sign-in
+6. Verify your status with the `auth-status` tool
+
+### Token Management
+
 The server stores authentication tokens in a `tokens.json` file alongside your configuration. Tokens are refreshed automatically 5 minutes before expiration. You can customize the token file location with the `MSTODO_TOKEN_FILE` environment variable.
 
-**Re-authentication**: If your tokens expire or become invalid, simply call `start-auth` again. The server also attempts automatic refresh on each API call.
+**Re-authentication**: If your tokens expire or become invalid, simply call `start-auth` (authorization code flow) or `start-device-auth` (device code flow) again. The server also attempts automatic refresh on each API call.
 
 ## MCP Tools
 
-The server provides 17 tools for comprehensive Microsoft To Do management:
+The server provides 17 tools for comprehensive Microsoft To Do management. The authentication tool depends on your `AUTH_FLOW` setting: `start-auth` for authorization code flow, `start-device-auth` for device code flow.
 
 ### Authentication
 
-| Tool              | Description                                                                                                                                 |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`auth-status`** | Check authentication status — shows credential presence, token expiration time, account type (personal/work), and last refresh error if any |
-| **`start-auth`**  | Start the Microsoft OAuth flow — returns a URL to open in your browser; tokens are saved automatically after consent                        |
+| Tool                    | Description                                                                                                                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`auth-status`**       | Check authentication status — shows credential presence, token expiration time, account type (personal/work), and last refresh error if any                                            |
+| **`start-auth`**        | Start the Microsoft OAuth browser flow — returns a URL to open in your browser; tokens are saved automatically after consent. Available when `AUTH_FLOW=authorization_code` (default). |
+| **`start-device-auth`** | Start device code authentication — displays a user code and verification URL; visit the URL on any device to complete sign-in. Available when `AUTH_FLOW=device_code`.                 |
 
 ### Task Lists
 
@@ -258,7 +354,9 @@ pnpm run lint         # Run linting checks
 
 - **MCP Server** (`src/todo-index.ts`) — Core server implementing the MCP protocol with 17 tools
 - **CLI Wrapper** (`src/cli.ts`) — Executable entry point; checks for credentials and starts the server
-- **OAuth Engine** (`src/oauth-engine.ts`) — MSAL-based OAuth logic: authorization URL generation, token exchange, and refresh
+- **Auth Flow Config** (`src/auth-flow-config.ts`) — Reads the `AUTH_FLOW` environment variable and selects the appropriate authentication flow
+- **OAuth Engine** (`src/oauth-engine.ts`) — MSAL-based OAuth logic for authorization code flow: authorization URL generation, token exchange, and refresh
+- **Device Code Engine** (`src/device-code-engine.ts`) — MSAL-based device code flow using `PublicClientApplication`; requires only `CLIENT_ID` (no client secret)
 - **Auth Callback Server** (`src/auth-callback-server.ts`) — Lightweight HTTP server that listens for the OAuth callback during `start-auth` and writes tokens via `TokenManager`
 - **Token Manager** (`src/token-manager.ts`) — Reads, writes, and refreshes tokens in `tokens.json`
 - **Graph Client** (`src/graph-client.ts`) — Microsoft Graph API helper for authenticated requests
@@ -279,7 +377,7 @@ Personal Microsoft accounts (Outlook.com, Hotmail, Live) have **limited access**
 
 This server detects and communicates the personal account limitation proactively:
 
-1. **Detection at sign-in** — When you complete the `start-auth` flow, the server checks whether your account is a personal Microsoft account and stores that information in your token metadata.
+1. **Detection at sign-in** — When you complete the `start-auth` or `start-device-auth` flow, the server checks whether your account is a personal Microsoft account and stores that information in your token metadata.
 2. **Warning via `auth-status`** — Running `auth-status` shows your account type (personal or work/school) so you can verify at any time.
 3. **Actionable error messages** — If you use a data tool (e.g., `get-task-lists`) with a personal account, the server returns a `[MAILBOX_NOT_ENABLED]` error with a clear explanation and a link to this section.
 
@@ -301,14 +399,14 @@ Microsoft offers a free developer program that includes a Microsoft 365 tenant w
 6. Once the tenant is provisioned, you'll receive a work account (e.g., `admin@yourname.onmicrosoft.com`).
 7. [Register a new Azure App](#azure-app-registration) in this developer tenant, making sure to set the redirect URI to `http://localhost:4040/callback` and add the required Graph API permissions (`Tasks.Read`, `Tasks.ReadWrite`, `User.Read`).
 8. Update your MCP client configuration with the new `CLIENT_ID`, `CLIENT_SECRET`, and set `TENANT_ID` to your developer tenant GUID (found in the Azure Portal under **Overview**).
-9. Run `start-auth` and sign in with your new developer tenant account.
+9. Run `start-auth` (or `start-device-auth` if using device code flow) and sign in with your new developer tenant account.
 
 #### Option 2 — Use an Existing Work or School Account
 
 If you have a Microsoft 365 account through your employer or school:
 
 1. Update your MCP client configuration and set `TENANT_ID` to `organizations`.
-2. Run `start-auth` and sign in with your work or school account.
+2. Run `start-auth` (or `start-device-auth`) and sign in with your work or school account.
 3. Your organization's account has full To Do API access.
 
 #### Option 3 — Use the Microsoft To Do App Directly
@@ -338,13 +436,20 @@ The web and mobile apps work with personal accounts and provide the full To Do e
 
 **"Missing required credentials" at startup**
 
-The server requires `CLIENT_ID` and `CLIENT_SECRET` in your MCP client's `env` configuration. Verify these are set correctly in your client's config file.
+- For **authorization code flow**: ensure `CLIENT_ID` and `CLIENT_SECRET` are set in your MCP client's `env` configuration.
+- For **device code flow**: ensure `CLIENT_ID` is set. `CLIENT_SECRET` is not required.
 
 **Token acquisition failures**
 
-- Ensure your Azure App's redirect URI matches exactly: `http://localhost:4040/callback`
+- Ensure your Azure App's redirect URI matches exactly: `http://localhost:4040/callback` (authorization code flow only)
 - Check that the required Graph API permissions (`Tasks.Read`, `Tasks.ReadWrite`, `User.Read`) are added and consented
 - For organizational accounts, admin consent may be required
+
+**Device code flow issues**
+
+- Ensure **Allow public client flows** is enabled in your Azure App Registration under **Authentication**
+- The user code expires after 15 minutes — if it expires, call `start-device-auth` again
+- If you see "flow already in progress", the server is still polling for the previous attempt. Wait for it to complete or restart the server.
 
 **Check authentication status**
 

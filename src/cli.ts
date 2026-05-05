@@ -3,27 +3,39 @@
 import { startServer } from "./todo-index.js"
 import { pathToFileURL } from "url"
 import { logger } from "./infrastructure/logger.js"
+import { getAuthFlow } from "./auth-flow-config.js"
 
 /**
- * CLI entry point. Checks for OAuth client credentials (CLIENT_ID and
- * CLIENT_SECRET) in process.env and starts the MCP server, or exits with an
- * actionable error when credentials are missing. The server starts even when
- * no tokens are present so the start-auth MCP tool is available.
+ * CLI entry point. Validates required environment variables based on the
+ * detected AUTH_FLOW and starts the MCP server.
+ *
+ * - `authorization_code` (default): requires CLIENT_ID and CLIENT_SECRET.
+ * - `device_code`: requires only CLIENT_ID (public client — no secret).
+ *
+ * The server starts even when no tokens are present so the auth tools
+ * are available.
  */
 export async function runCli(): Promise<void> {
+  const flow = getAuthFlow()
   const missing: string[] = []
+
   if (!process.env.CLIENT_ID) missing.push("CLIENT_ID")
-  if (!process.env.CLIENT_SECRET) missing.push("CLIENT_SECRET")
+
+  if (flow === "authorization_code") {
+    if (!process.env.CLIENT_SECRET) missing.push("CLIENT_SECRET")
+  }
 
   if (missing.length > 0) {
     const list = missing.join(" and ")
     logger.error(
-      `Microsoft To Do MCP server: missing required credential${missing.length > 1 ? "s" : ""}: ${list}. ` +
+      `Microsoft To Do MCP server (AUTH_FLOW=${flow}): missing required credential${missing.length > 1 ? "s" : ""}: ${list}. ` +
         `Provide them via the MCP client's "env" field in your server configuration.`,
-      { source: "cli", missing },
+      { source: "cli", missing, authFlow: flow },
     )
     throw new Error(`Missing required credential(s): ${list}`)
   }
+
+  logger.info("Starting server", { source: "cli", authFlow: flow })
 
   await startServer()
 }

@@ -1,16 +1,26 @@
 /**
  * MCP tool handlers for authentication operations.
  *
- * Registers the `auth-status` and `start-auth` tools on an McpServer instance.
+ * Registers the `auth-status` and `start-auth` (authorization code) or
+ * `start-device-auth` (device code) tools on an McpServer instance,
+ * depending on the AUTH_FLOW environment variable.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { tokenManager } from "../../token-manager.js"
 import { startAuthFlow } from "../../auth-callback-server.js"
 import { OAuthConfigError } from "../../oauth-engine.js"
+import { createDeviceCodeEngine, DeviceCodeConfigError, DeviceCodeFlowHandle } from "../../device-code-engine.js"
 import { openBrowser } from "../../open-browser.js"
 import { handleToolError } from "../error-handler.js"
 import { logger } from "../../infrastructure/logger.js"
 import { formatAuthStatusText } from "./auth-helpers.js"
+import { isDeviceCodeFlow } from "../../auth-flow-config.js"
+
+// ---------------------------------------------------------------------------
+// Module-level state — concurrent device code flow guard
+// ---------------------------------------------------------------------------
+
+let activeDeviceCodeHandle: DeviceCodeFlowHandle | null = null
 
 // ---------------------------------------------------------------------------
 // Named handlers
@@ -20,13 +30,11 @@ async function handleAuthStatus() {
   const tokens = await tokenManager.getTokens()
 
   if (!tokens) {
+    const flowMessage = isDeviceCodeFlow()
+      ? 'Not authenticated. Provide CLIENT_ID via the MCP client\'s "env" field, then use the start-device-auth tool to authenticate with Microsoft.'
+      : 'Not authenticated. Provide CLIENT_ID and CLIENT_SECRET via the MCP client\'s "env" field, then use the start-auth tool to authenticate with Microsoft.'
     return {
-      content: [
-        {
-          type: "text" as const,
-          text: 'Not authenticated. Provide CLIENT_ID and CLIENT_SECRET via the MCP client\'s "env" field, then use the start-auth tool to authenticate with Microsoft.',
-        },
-      ],
+      content: [{ type: "text" as const, text: flowMessage }],
     }
   }
 
@@ -102,6 +110,121 @@ async function handleStartAuth() {
 }
 
 // ---------------------------------------------------------------------------
+// Device code flow handler
+// ---------------------------------------------------------------------------
+
+async function handleStartDeviceAuth() {
+  // Concurrent guard: if a flow is already active, return the existing info.
+  if (activeDeviceCodeHandle) {
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: [
+            "A device code authentication flow is already in progress.",
+            "",
+            `User code: ${activeDeviceCodeHandle.userCode}`,
+            "",
+            "Visit the URL below and enter the code:",
+            `[Verify](${activeDeviceCodeHandle.verificationUri})`,
+            "",
+            "Or copy and paste the URL:",
+            "```",
+            activeDeviceCodeHandle.verificationUri,
+            "```",
+            "",
+            "Tokens will be saved automatically once you complete authentication.",
+          ].join("\n"),
+        },
+      ],
+    }
+  }
+
+  try {
+    const engine = createDeviceCodeEngine()
+    const handle = engine.initiateDeviceCodeFlow()
+    activeDeviceCodeHandle = handle
+
+    // Background promise: save tokens on success, log on failure, clear handle.
+    handle.result
+      .then((tokenResult) => {
+        try {
+          tokenManager.saveTokens({
+            accessToken: tokenResult.accessToken,
+            refreshToken: tokenResult.refreshToken,
+            expiresAt: tokenResult.expiresAt,
+            ...(tokenResult.isPersonalAccount ? { isPersonalAccount: true } : {}),
+          })
+          logger.info("[start-device-auth] Tokens saved successfully.", {
+            source: "auth-tools",
+            isPersonalAccount: tokenResult.isPersonalAccount ?? false,
+          })
+        } catch (saveErr: unknown) {
+          logger.error("[start-device-auth] Failed to save tokens.", {
+            source: "auth-tools",
+            error: saveErr instanceof Error ? saveErr.message : String(saveErr),
+          })
+        }
+      })
+      .catch((err: unknown) => {
+        logger.error("[start-device-auth] Device code exchange failed.", {
+          source: "auth-tools",
+          error: err instanceof Error ? err.message : String(err),
+        })
+      })
+      .finally(() => {
+        activeDeviceCodeHandle = null
+      })
+
+    logger.info("[start-device-auth] Device code flow initiated.", {
+      source: "auth-tools",
+      verificationUri: handle.verificationUri,
+    })
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: [
+            "Microsoft Device Code Authentication",
+            "====================================",
+            "",
+            "To sign in, visit the URL below and enter the code when prompted.",
+            "",
+            `**Code:** \`${handle.userCode}\``,
+            "",
+            `[Click here to verify: ${handle.verificationUri}](${handle.verificationUri})`,
+            "",
+            "Or copy and paste the verification URL:",
+            "```",
+            handle.verificationUri,
+            "```",
+            "",
+            "After you complete authentication, your tokens will be saved automatically.",
+            "You can verify your status with the auth-status tool.",
+            "",
+            "Note: If you authenticate with a personal Microsoft account (Outlook.com, Hotmail.com, Live.com, etc.), Microsoft To Do API access may be unavailable through the Microsoft Graph API. This is a Microsoft platform restriction, not an authentication issue.",
+          ].join("\n"),
+        },
+      ],
+    }
+  } catch (err: unknown) {
+    // Config error — actionable message referencing only CLIENT_ID.
+    if (err instanceof DeviceCodeConfigError) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Device code configuration error: ${err.message}. Please ensure CLIENT_ID is set in your MCP client's "env" field.`,
+          },
+        ],
+      }
+    }
+    return handleToolError(err)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
 
@@ -113,10 +236,19 @@ export function registerAuthTools(server: McpServer): void {
     handleAuthStatus,
   )
 
-  server.tool(
-    "start-auth",
-    "Start the Microsoft OAuth authentication flow. Automatically opens your default browser to the authentication page. After you complete authentication, tokens are saved automatically. Use this when you need to authenticate for the first time or when your tokens have expired.",
-    {},
-    handleStartAuth,
-  )
+  if (isDeviceCodeFlow()) {
+    server.tool(
+      "start-device-auth",
+      "Start device code authentication with Microsoft. Displays a user code and verification URL — visit the URL on any device, enter the code, and complete sign-in. Tokens are saved automatically. Use this when you need to authenticate for the first time or when your tokens have expired.",
+      {},
+      handleStartDeviceAuth,
+    )
+  } else {
+    server.tool(
+      "start-auth",
+      "Start the Microsoft OAuth authentication flow. Automatically opens your default browser to the authentication page. After you complete authentication, tokens are saved automatically. Use this when you need to authenticate for the first time or when your tokens have expired.",
+      {},
+      handleStartAuth,
+    )
+  }
 }

@@ -12,6 +12,7 @@
 import { readFileSync, writeFileSync, existsSync } from "fs"
 import { join } from "path"
 import { getTokenFilePath } from "../paths.js"
+import { isDeviceCodeFlow } from "../auth-flow-config.js"
 import { logger } from "./logger.js"
 
 // ---------------------------------------------------------------------------
@@ -111,8 +112,9 @@ export class TokenRepository {
     const clientId = process.env.CLIENT_ID
     const clientSecret = process.env.CLIENT_SECRET
     const tenantId = process.env.TENANT_ID || "organizations"
+    const deviceCode = isDeviceCodeFlow()
 
-    if (!clientId || !clientSecret) {
+    if (!clientId || (!deviceCode && !clientSecret)) {
       logger.warn("Missing client credentials for token refresh", { source: "token-repository" })
       return null
     }
@@ -123,7 +125,7 @@ export class TokenRepository {
     try {
       const formData = new URLSearchParams({
         client_id: clientId,
-        client_secret: clientSecret,
+        ...(clientSecret ? { client_secret: clientSecret } : {}),
         refresh_token: refreshToken,
         grant_type: "refresh_token",
         scope: "offline_access Tasks.Read Tasks.ReadWrite Tasks.Read.Shared Tasks.ReadWrite.Shared User.Read",
@@ -204,11 +206,17 @@ export class TokenRepository {
   }
 
   promptForReauth(): void {
+    const toolName = isDeviceCodeFlow() ? "start-device-auth" : "start-auth"
+    const credentialHint = isDeviceCodeFlow() ? "CLIENT_ID" : "CLIENT_ID and CLIENT_SECRET"
+
     logger.info(
       "TOKEN REFRESH FAILED - REAUTHENTICATION REQUIRED. " +
         "Your Microsoft To Do tokens have expired and could not be refreshed. " +
-        "Use the 'start-auth' MCP tool to re-authenticate, complete the authentication in your browser, " +
-        "and your tokens will be refreshed automatically. " +
+        `Use the '${toolName}' MCP tool to re-authenticate. ` +
+        (isDeviceCodeFlow()
+          ? "Complete the device code flow in your browser, and your tokens will be refreshed automatically. "
+          : "Complete the authentication in your browser, and your tokens will be refreshed automatically. ") +
+        `Ensure ${credentialHint} is configured. ` +
         `Token file: ${this.tokenFilePath}`,
       { source: "token-repository" },
     )

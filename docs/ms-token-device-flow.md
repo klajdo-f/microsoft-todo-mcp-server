@@ -1,140 +1,254 @@
-# Microsoft graph for personal accounts
+# Device Code Authentication Guide
 
-Always store the *new* refresh token returned by this call, as Microsoft Identity may rotate refresh tokens for security purposes. Store this configuration inAs an expert in the Microsoft Graph API, I can guide you through the process of setting up OAuth 2.0 and querying the API to integrate your personal `@hotmail.com` account with your Model Context Protocol (MCP) server.
+This guide explains how to use the **device code flow** with the Microsoft To Do MCP Server. The device code flow is designed for headless, terminal-only, or remote environments where opening a browser on the same machine isn't possible.
 
-Accessing personal Microsoft accounts (MSA) uses the exact same Microsoft Graph API structure as enterprise accounts, but you must route your authentication through the Microsoft identity platform's consumer endpoints and ensure your app registration permits personal accounts.
+## When to Use Device Code Flow
 
-Here is the architectural blueprint and step-by-step guide to building this integration.
+Use device code flow when:
 
-## Step 1: Register your Application in Microsoft Entra ID
+- Your MCP client runs in a terminal-only environment (SSH, containers, remote servers)
+- No browser is available on the machine running the MCP server
+- You prefer to authenticate on a separate device (phone, tablet, another computer)
 
-To interact with the Graph API, your MCP server needs an identity. You will register an application in the Azure Portal (now Microsoft Entra ID). **You do not need a paid Azure subscription for this; a free personal account works.**
+Use the default **authorization code flow** when you have a browser available on the same machine — it's simpler and doesn't require Azure app configuration changes.
 
-1. Navigate to the [Azure Portal - App Registrations](https://portal.azure.com/#blade/Microsoft_AAD_IAM/ActiveDirectoryMenuBlade/RegisteredApps).
-2. Click **New registration**.
-3. **Name:** e.g., `MCP-Graph-Integration`.
-4. **Supported account types:** This is the most critical step for a Hotmail account. You **must** select:
-   * *Accounts in any organizational directory (Any Microsoft Entra ID tenant - Multitenant) and personal Microsoft accounts (e.g. Skype, Xbox)* **OR**
-   * *Personal Microsoft accounts only*.
-5. **Redirect URI:**
-   * If you are using the **Authorization Code Flow** (spinning up a local HTTP server to catch the callback), set it to `Web` or `Single-page application` and use `http://localhost:3000/callback` (or your preferred port).
-   * If you plan to use the **Device Authorization Grant** (best for headless CLI/MCP server processes), leave this blank for now, but under your app's **Authentication** menu, enable **Allow public client flows**.
-6. Once created, save your **Application (client) ID**.
-7. If using the Authorization Code flow, go to **Certificates & secrets** and create a **New client secret**. Save this value immediately.
+## Prerequisites
 
-## Step 2: Define Your OAuth 2.0 Scopes
+### 1. Azure App Registration
 
-Scopes dictate what your MCP server is allowed to read and write. Because you are building a background tool that needs continuous access without prompting you to log in every hour, you must request offline access.
+If you haven't already, register an application in the [Azure Portal](https://portal.azure.com):
 
-Your required `scope` string will be:
-`User.Read Calendars.ReadWrite Tasks.ReadWrite offline_access`
+1. Navigate to **App registrations** → **New registration**
+2. Name your application (e.g., "To Do MCP — Device Code")
+3. For **Supported account types**, choose based on your needs (see the [Azure App Registration](../README.md#azure-app-registration) section in the README for details)
+4. Set the **Redirect URI** to `http://localhost:4040/callback` (required even though device code flow doesn't use it directly)
 
-* `Calendars.ReadWrite`: Grants access to your Outlook/Hotmail Calendar.
-* `Tasks.ReadWrite`: Grants access to your Microsoft To Do tasks.
-* `offline_access`: Yields a **Refresh Token** alongside your Access Token. Your MCP server will securely store this to silently mint new access tokens when they expire.
+### 2. Enable Public Client Flows
 
-## Step 3: Implement the OAuth 2.0 Flow
+This is the critical step for device code flow:
 
-For a personal account, you must use the `consumers` or `common` tenant endpoints.
+1. In your Azure App Registration, go to **Authentication**
+2. Scroll to **Advanced settings**
+3. Enable **Allow public client flows**
+4. Click **Save**
 
-### Option A: Device Code Flow (Recommended for headless MCP servers)
+Without this setting, the device code flow will fail with an authorization error.
 
-This avoids needing a local web server for redirects. The server outputs a code, you type it into a browser, and the server polls for the token.
+### 3. API Permissions
 
-1. **Request Device Code:**
-`POST https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode`
+Ensure your app registration has these **Microsoft Graph → Delegated permissions**:
 
-```x-www-form-urlencoded
-   client_id=YOUR_CLIENT_ID
-   scope=User.Read Calendars.ReadWrite Tasks.ReadWrite offline_access
-   ```
+- `Tasks.Read`
+- `Tasks.Read.Shared`
+- `Tasks.ReadWrite`
+- `Tasks.ReadWrite.Shared`
+- `User.Read`
+- `offline_access` (included automatically)
 
-1. **Poll for Token:**
-`POST https://login.microsoftonline.com/consumers/oauth2/v2.0/token`
+Click **Grant admin consent** for organizational accounts.
 
-```x-www-form-urlencoded
-   grant_type=urn:ietf:params:oauth:grant-type:device_code
-   client_id=YOUR_CLIENT_ID
-   device_code=DEVICE_CODE_FROM_PREVIOUS_STEP
-   ```
+## Configuration
 
-### Option B: Authorization Code Flow (Standard web flow)
+### Environment Variables
 
-1. **Get Authorization Code (Browser redirect):**
-`GET https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?client_id=YOUR_CLIENT_ID&response_type=code&redirect_uri=http://localhost:3000/callback&scope=User.Read Calendars.ReadWrite Tasks.ReadWrite offline_access`
-2. **Exchange Code for Token:**
-`POST https://login.microsoftonline.com/consumers/oauth2/v2.0/token`
+Device code flow requires **only** `CLIENT_ID`. No client secret is needed.
 
-```x-www-form-urlencoded
-   client_id=YOUR_CLIENT_ID
-   client_secret=YOUR_CLIENT_SECRET
-   code=CODE_FROM_URL
-   redirect_uri=http://localhost:3000/callback
-   grant_type=authorization_code
-   ```
+| Variable    | Required | Description                                                                              |
+| ----------- | -------- | ---------------------------------------------------------------------------------------- |
+| `CLIENT_ID` | **Yes**  | Your Azure App Registration application (client) ID                                      |
+| `AUTH_FLOW` | **Yes**  | Must be set to `device_code`                                                             |
+| `TENANT_ID` | No       | Defaults to `organizations`. Set to `consumers` for personal accounts, `common` for both |
 
-## Step 4: Microsoft Graph API Endpoints for MCP Tools
+> **Note:** `CLIENT_SECRET` is **not required** and will be ignored when using device code flow. The device code flow is a _public client_ OAuth grant — it does not use a client secret.
 
-Once you have the `access_token`, include it in the header of all Graph API requests:
-`Authorization: Bearer <your_access_token>`
+### MCP Client Configuration Examples
 
-### 1. Microsoft To Do (Tasks API)
+#### Claude Desktop
 
-Microsoft To Do is accessed via the `todo` endpoints in the Graph API v1.0.
-
-* **List Task Lists:**
-`GET https://graph.microsoft.com/v1.0/me/todo/lists`
-*(Note: You need the `id` of a specific list to fetch or create tasks inside it.)*
-* **List Tasks in a List:**
-`GET https://graph.microsoft.com/v1.0/me/todo/lists/{list-id}/tasks?$filter=status ne 'completed'`
-* **Create a Task:**
-`POST https://graph.microsoft.com/v1.0/me/todo/lists/{list-id}/tasks`
+Add to your `claude_desktop_config.json`:
 
 ```json
 {
-  "title": "Build MCP Server for Graph API",
-  "importance": "high",
-  "dueDateTime": {
-    "dateTime": "2026-05-10T12:00:00",
-    "timeZone": "W. Europe Standard Time"
+  "mcpServers": {
+    "microsoftTodo": {
+      "command": "npx",
+      "args": ["-y", "microsoft-todo-mcp-server"],
+      "env": {
+        "CLIENT_ID": "your_client_id",
+        "AUTH_FLOW": "device_code"
+      }
+    }
   }
 }
 ```
 
-#### 2. Outlook Calendar API
+#### Cursor
 
-* **List Events (Next 7 Days):**
-Use the `calendarView` endpoint instead of `events` to automatically expand recurring events.
-`GET https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=2026-05-05T00:00:00Z&endDateTime=2026-05-12T00:00:00Z`
-* **Create a Calendar Event:**
-`POST https://graph.microsoft.com/v1.0/me/events`
+Add to `~/.cursor/mcp.json` or your project's `.cursor/mcp.json`:
 
 ```json
 {
-  "subject": "Deep Work: MCP Integration",
-  "start": {
-    "dateTime": "2026-05-06T10:00:00",
-    "timeZone": "W. Europe Standard Time"
-  },
-  "end": {
-    "dateTime": "2026-05-06T12:00:00",
-    "timeZone": "W. Europe Standard Time"
+  "mcpServers": {
+    "microsoftTodo": {
+      "command": "npx",
+      "args": ["-y", "microsoft-todo-mcp-server"],
+      "env": {
+        "CLIENT_ID": "your_client_id",
+        "AUTH_FLOW": "device_code"
+      }
+    }
   }
 }
 ```
 
-### Step 5: Handling Token Expiration in your MCP Server
+#### Windsurf
 
-Access tokens expire after roughly 60 minutes. Your MCP server needs background logic to silently refresh the token before fulfilling a context request.
+Add to your Windsurf MCP configuration:
 
-**To refresh the token:**
-`POST https://login.microsoftonline.com/consumers/oauth2/v2.0/token`
-
-```x-www-form-urlencoded
-client_id=YOUR_CLIENT_ID
-client_secret=YOUR_CLIENT_SECRET (if using Auth Code flow)
-grant_type=refresh_token
-refresh_token=YOUR_STORED_REFRESH_TOKEN
+```json
+{
+  "mcpServers": {
+    "microsoftTodo": {
+      "command": "npx",
+      "args": ["-y", "microsoft-todo-mcp-server"],
+      "env": {
+        "CLIENT_ID": "your_client_id",
+        "AUTH_FLOW": "device_code"
+      }
+    }
+  }
+}
 ```
 
-Always store the *new* refresh token returned by this call, as Microsoft Identity may rotate refresh tokens for security purposes. Store this configuration in a local `.env` or secure JSON keystore that your MCP server process can read/write to at runtime.
+## Using `start-device-auth`
+
+Once your MCP client is configured with `AUTH_FLOW=device_code`, the server registers the `start-device-auth` tool instead of `start-auth`.
+
+### Step-by-Step
+
+1. **Ask your AI assistant** to run the `start-device-auth` tool (e.g., _"Run start-device-auth to authenticate"_)
+2. The tool responds with:
+   - A **user code** (e.g., `A1B2C3D4`)
+   - A **verification URL** (e.g., `https://microsoft.com/devicelogin`)
+3. **Open the verification URL** on any device — your phone, another computer, or a different browser
+4. **Enter the user code** when prompted
+5. **Sign in** with your Microsoft account and grant consent
+6. The MCP server polls Microsoft in the background and **saves your tokens automatically** once you complete sign-in
+7. Verify with the `auth-status` tool
+
+### What the Tool Returns
+
+The `start-device-auth` tool returns a response like:
+
+```
+Microsoft Device Code Authentication
+====================================
+
+To sign in, visit the URL below and enter the code when prompted.
+
+**Code:** `A1B2C3D4`
+
+[Click here to verify: https://microsoft.com/devicelogin](https://microsoft.com/devicelogin)
+
+Or copy and paste the verification URL:
+```
+
+https://microsoft.com/devicelogin
+
+```
+
+After you complete authentication, your tokens will be saved automatically.
+You can verify your status with the auth-status tool.
+```
+
+### Timing
+
+- The user code is valid for **15 minutes**. If you don't complete sign-in within that time, the flow expires and you'll need to run `start-device-auth` again.
+- The server polls Microsoft every few seconds. Token acquisition typically completes within a few seconds after you sign in.
+
+### Concurrent Flow Guard
+
+If you call `start-device-auth` while a previous flow is still pending, the tool returns the existing user code and verification URL instead of starting a new flow. This prevents confusion from multiple concurrent flows.
+
+## After Sign-In
+
+Once you complete sign-in:
+
+1. **Tokens are saved automatically** to `tokens.json` (or the path specified by `MSTODO_TOKEN_FILE`)
+2. The server stores the access token, refresh token, expiration time, and account type
+3. Tokens are **refreshed automatically** 5 minutes before expiration
+4. Run `auth-status` at any time to check your authentication state:
+   - Whether credentials are present
+   - Token expiration time
+   - Account type (personal or work/school)
+   - Any refresh errors
+
+## Personal Microsoft Accounts
+
+> **Warning:** Personal Microsoft accounts (Outlook.com, Hotmail.com, Live.com) have **limited access** to the Microsoft To Do API through Microsoft Graph. This is a Microsoft platform restriction, not an authentication issue.
+
+The server detects personal accounts at sign-in and warns you. If you authenticate with a personal account, To Do data tools (like `get-task-lists`) may return a `[MAILBOX_NOT_ENABLED]` error.
+
+For full API access, use a work/school account or sign up for a free [Microsoft 365 Developer Program](https://developer.microsoft.com/microsoft-365/dev-program) tenant. See the [Personal Microsoft Accounts](../README.md#personal-microsoft-accounts) section in the README for detailed alternatives.
+
+## Troubleshooting
+
+### "Device code configuration error: Missing required device-code environment variable(s): CLIENT_ID"
+
+The `CLIENT_ID` environment variable is not set. Add it to your MCP client's `env` configuration:
+
+```json
+"env": {
+  "CLIENT_ID": "your_client_id",
+  "AUTH_FLOW": "device_code"
+}
+```
+
+### "A device code authentication flow is already in progress"
+
+A previous `start-device-auth` call is still polling. The tool returns the existing user code and verification URL. Either:
+
+- Complete the existing flow on the verification URL
+- Wait for the previous flow to expire (15 minutes)
+- Restart the MCP server to clear the state
+
+### User code expired
+
+User codes expire after 15 minutes. Call `start-device-auth` again to get a fresh code.
+
+### "Allow public client flows" error at sign-in
+
+If you see an error about the client not being authorized for device code flow:
+
+1. Go to your Azure App Registration in the Azure Portal
+2. Navigate to **Authentication** → **Advanced settings**
+3. Enable **Allow public client flows**
+4. Click **Save**
+5. Try `start-device-auth` again
+
+### Token refresh failures
+
+Tokens are refreshed automatically 5 minutes before expiration. If refresh fails:
+
+- Run `auth-status` to see the specific error
+- If the refresh token has been revoked, run `start-device-auth` again to re-authenticate
+- Ensure your Azure App Registration's API permissions are still granted
+
+### The `start-auth` tool is not available
+
+When `AUTH_FLOW=device_code`, the server registers `start-device-auth` instead of `start-auth`. This is expected — only one authentication tool is available at a time, matching your configured flow.
+
+## Switching Between Flows
+
+To switch from device code flow back to authorization code flow:
+
+1. Remove `AUTH_FLOW` from your MCP client configuration (or set it to `authorization_code`)
+2. Add `CLIENT_SECRET` and `TENANT_ID` to the `env` configuration
+3. Restart your MCP client
+
+To switch from authorization code to device code flow:
+
+1. Set `AUTH_FLOW=device_code` in your MCP client's `env` configuration
+2. Ensure `CLIENT_ID` is set
+3. Remove `CLIENT_SECRET` (optional — it's ignored in device code flow)
+4. Restart your MCP client
