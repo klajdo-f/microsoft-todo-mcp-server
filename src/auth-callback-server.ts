@@ -11,15 +11,23 @@ import { createOAuthEngine, type OAuthEngine } from "./oauth-engine.js"
 import { tokenManager, type StoredTokenData } from "./token-manager.js"
 import { logger } from "./infrastructure/logger.js"
 import {
-  portFromRedirectUri, parseQuery, parseClientInfo, CONSUMER_TENANT,
-  sendHtmlResponse, buildSuccessHtml, buildFailureHtml,
+  portFromRedirectUri,
+  parseQuery,
+  parseClientInfo,
+  CONSUMER_TENANT,
+  sendHtmlResponse,
+  buildSuccessHtml,
+  buildFailureHtml,
 } from "./auth-callback-helpers.js"
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface AuthFlowResult { success: boolean; message: string }
+export interface AuthFlowResult {
+  success: boolean
+  message: string
+}
 export interface AuthFlowOptions {
   timeoutMs?: number
   redirectUri?: string
@@ -33,8 +41,18 @@ let activeServer: Server | null = null
 let activeTimer: ReturnType<typeof setTimeout> | null = null
 
 function cleanupActiveFlow(): void {
-  if (activeTimer) { clearTimeout(activeTimer); activeTimer = null }
-  if (activeServer) { try { activeServer.close() } catch { /* already closed */ }; activeServer = null }
+  if (activeTimer) {
+    clearTimeout(activeTimer)
+    activeTimer = null
+  }
+  if (activeServer) {
+    try {
+      activeServer.close()
+    } catch {
+      /* already closed */
+    }
+    activeServer = null
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -42,8 +60,13 @@ function cleanupActiveFlow(): void {
 // ---------------------------------------------------------------------------
 
 function failFlow(
-  res: ServerResponse, resolve: (r: AuthFlowResult) => void, status: number, htmlMsg: string, resultMsg: string,
-  logLevel: "warn" | "error", logMsg: string,
+  res: ServerResponse,
+  resolve: (r: AuthFlowResult) => void,
+  status: number,
+  htmlMsg: string,
+  resultMsg: string,
+  logLevel: "warn" | "error",
+  logMsg: string,
 ): void {
   logger[logLevel](logMsg, { source: "start-auth" })
   sendHtmlResponse(res, status, buildFailureHtml(htmlMsg))
@@ -58,35 +81,65 @@ const PERSONAL_ACCOUNT_HELP =
   "To authenticate with a personal account, set the environment variable TENANT_ID=consumers and restart the server, then run start-auth again."
 
 function buildCallbackHandler(
-  engine: OAuthEngine, resolve: (r: AuthFlowResult) => void,
+  engine: OAuthEngine,
+  resolve: (r: AuthFlowResult) => void,
 ): (req: IncomingMessage, res: ServerResponse) => void {
   return (req, res) => {
-    if (!req.url?.startsWith("/callback")) { res.writeHead(404); res.end("Not found"); return }
+    if (!req.url?.startsWith("/callback")) {
+      res.writeHead(404)
+      res.end("Not found")
+      return
+    }
     const params = parseQuery(req.url)
     const { code, error, error_description: errorDesc } = params as Record<string, string>
 
     if (error) {
-      failFlow(res, resolve, 400, errorDesc || error,
+      failFlow(
+        res,
+        resolve,
+        400,
+        errorDesc || error,
         `Authentication failed: ${errorDesc || error}. Please try start-auth again.`,
-        "error", `[start-auth] OAuth error in callback: ${error}`)
+        "error",
+        `[start-auth] OAuth error in callback: ${error}`,
+      )
       return
     }
     if (!code) {
-      failFlow(res, resolve, 400, "No authorization code received.",
+      failFlow(
+        res,
+        resolve,
+        400,
+        "No authorization code received.",
         "No authorization code received in callback. Please try start-auth again.",
-        "warn", "[start-auth] Callback received without authorization code.")
+        "warn",
+        "[start-auth] Callback received without authorization code.",
+      )
       return
     }
     const clientInfo = parseClientInfo(params["client_info"])
     if (clientInfo?.utid === CONSUMER_TENANT && engine.tenantId === "organizations") {
-      failFlow(res, resolve, 400, PERSONAL_ACCOUNT_HELP, PERSONAL_ACCOUNT_HELP, "warn", `[start-auth] ${PERSONAL_ACCOUNT_HELP}`)
+      failFlow(
+        res,
+        resolve,
+        400,
+        PERSONAL_ACCOUNT_HELP,
+        PERSONAL_ACCOUNT_HELP,
+        "warn",
+        `[start-auth] ${PERSONAL_ACCOUNT_HELP}`,
+      )
       return
     }
 
     logger.info("[start-auth] Authorization code received. Exchanging for tokens…", { source: "start-auth" })
-    engine.exchangeAuthCode(code)
+    engine
+      .exchangeAuthCode(code)
       .then((tokenResult) => {
-        tokenManager.saveTokens({ accessToken: tokenResult.accessToken, refreshToken: tokenResult.refreshToken, expiresAt: tokenResult.expiresAt })
+        tokenManager.saveTokens({
+          accessToken: tokenResult.accessToken,
+          refreshToken: tokenResult.refreshToken,
+          expiresAt: tokenResult.expiresAt,
+        })
         logger.info("[start-auth] Tokens saved successfully.", { source: "start-auth" })
         sendHtmlResponse(res, 200, buildSuccessHtml())
         cleanupActiveFlow()
@@ -94,9 +147,15 @@ function buildCallbackHandler(
       })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err)
-        failFlow(res, resolve, 500, `Token exchange failed: ${msg}`,
+        failFlow(
+          res,
+          resolve,
+          500,
+          `Token exchange failed: ${msg}`,
           `Token exchange failed: ${msg}. Please try start-auth again.`,
-          "error", `[start-auth] Token exchange failed: ${msg}`)
+          "error",
+          `[start-auth] Token exchange failed: ${msg}`,
+        )
       })
   }
 }
@@ -121,13 +180,22 @@ export async function startAuthFlow(
     activeTimer = setTimeout(() => {
       logger.warn("[start-auth] Timed out waiting for callback.", { source: "start-auth", timeoutMs })
       cleanupActiveFlow()
-      resolve({ success: false, message: "Authentication timed out after 2 minutes. The authorization URL may have expired. Please try start-auth again." })
+      resolve({
+        success: false,
+        message:
+          "Authentication timed out after 2 minutes. The authorization URL may have expired. Please try start-auth again.",
+      })
     }, timeoutMs)
-    server.listen(port, () => logger.info(`[start-auth] Callback server listening on port ${port}`, { source: "start-auth", port }))
+    server.listen(port, () =>
+      logger.info(`[start-auth] Callback server listening on port ${port}`, { source: "start-auth", port }),
+    )
     server.on("error", (err: Error) => {
       logger.error("[start-auth] Server error", { source: "start-auth", error: err.message })
       cleanupActiveFlow()
-      resolve({ success: false, message: `Could not start callback server: ${err.message}. Check if port ${port} is available.` })
+      resolve({
+        success: false,
+        message: `Could not start callback server: ${err.message}. Check if port ${port} is available.`,
+      })
     })
   })
 

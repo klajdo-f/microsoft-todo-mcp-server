@@ -47,10 +47,10 @@ function buildTaskFieldsFromParams(p: {
   body?: string
   dueDateTime?: string
   startDateTime?: string
-  importance?: string
+  importance?: "low" | "normal" | "high"
   isReminderOn?: boolean
   reminderDateTime?: string
-  status?: string
+  status?: "notStarted" | "inProgress" | "completed" | "waitingOnOthers" | "deferred"
   categories?: string[]
 }): TaskFields {
   return {
@@ -97,10 +97,10 @@ async function handleCreateTask(args: {
   body?: string
   dueDateTime?: string
   startDateTime?: string
-  importance?: string
+  importance?: "low" | "normal" | "high"
   isReminderOn?: boolean
   reminderDateTime?: string
-  status?: string
+  status?: "notStarted" | "inProgress" | "completed" | "waitingOnOthers" | "deferred"
   categories?: string[]
 }) {
   try {
@@ -122,10 +122,10 @@ async function handleUpdateTask(args: {
   body?: string
   dueDateTime?: string
   startDateTime?: string
-  importance?: string
+  importance?: "low" | "normal" | "high"
   isReminderOn?: boolean
   reminderDateTime?: string
-  status?: string
+  status?: "notStarted" | "inProgress" | "completed" | "waitingOnOthers" | "deferred"
   categories?: string[]
 }) {
   try {

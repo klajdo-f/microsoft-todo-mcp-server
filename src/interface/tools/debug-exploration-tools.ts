@@ -41,8 +41,16 @@ async function runOdataSelectTest(token: string): Promise<string> {
  * Test 2: Try various $expand options to retrieve related data.
  */
 const EXPAND_OPTIONS = [
-  "extensions", "singleValueExtendedProperties", "multiValueExtendedProperties",
-  "openExtensions", "parent", "children", "folder", "parentFolder", "group", "category",
+  "extensions",
+  "singleValueExtendedProperties",
+  "multiValueExtendedProperties",
+  "openExtensions",
+  "parent",
+  "children",
+  "folder",
+  "parentFolder",
+  "group",
+  "category",
 ]
 
 async function runOdataExpandTest(token: string): Promise<string> {
@@ -50,12 +58,21 @@ async function runOdataExpandTest(token: string): Promise<string> {
   for (const expand of EXPAND_OPTIONS) {
     try {
       const response = await makeGraphRequest<Record<string, unknown>>(
-        `${MS_GRAPH_BASE}/me/todo/lists?$expand=${expand}&$top=1`, token,
+        `${MS_GRAPH_BASE}/me/todo/lists?$expand=${expand}&$top=1`,
+        token,
       )
       results += `✓ $expand=${expand}: Success - `
-      if (response && typeof response === "object" && "value" in response && Array.isArray(response.value) && response.value.length > 0) {
+      if (
+        response &&
+        typeof response === "object" &&
+        "value" in response &&
+        Array.isArray(response.value) &&
+        response.value.length > 0
+      ) {
         const firstItem = response.value[0] as Record<string, unknown>
-        results += firstItem[expand] ? `Found data!\n${JSON.stringify(firstItem[expand], null, 2).substring(0, 500)}...\n` : `No additional data returned\n`
+        results += firstItem[expand]
+          ? `Found data!\n${JSON.stringify(firstItem[expand], null, 2).substring(0, 500)}...\n`
+          : `No additional data returned\n`
       }
     } catch (error: unknown) {
       results += `✗ $expand=${expand}: ${error instanceof Error ? error.message : "Failed"}\n`

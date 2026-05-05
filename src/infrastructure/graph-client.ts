@@ -39,11 +39,7 @@ function buildGraphRequestHeaders(token: string): Record<string, string> {
 }
 
 /** Build RequestInit, attaching JSON body for POST/PATCH methods. */
-function buildRequestInit(
-  method: string,
-  headers: Record<string, string>,
-  body?: unknown,
-): RequestInit {
+function buildRequestInit(method: string, headers: Record<string, string>, body?: unknown): RequestInit {
   const options: RequestInit = { method, headers }
   if (body && (method === "POST" || method === "PATCH")) {
     options.body = JSON.stringify(body)

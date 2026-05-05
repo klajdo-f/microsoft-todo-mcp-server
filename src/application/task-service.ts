@@ -62,19 +62,16 @@ function buildTaskBodyFromFields(fields: TaskFields, isUpdate: boolean): Record<
 
   // Date fields: update maps empty string to null (clear), create always sets dateTime/timeZone
   if (fields.dueDateTime !== undefined) {
-    taskBody.dueDateTime = !isUpdate || fields.dueDateTime !== ""
-      ? { dateTime: fields.dueDateTime, timeZone: "UTC" }
-      : null
+    taskBody.dueDateTime =
+      !isUpdate || fields.dueDateTime !== "" ? { dateTime: fields.dueDateTime, timeZone: "UTC" } : null
   }
   if (fields.startDateTime !== undefined) {
-    taskBody.startDateTime = !isUpdate || fields.startDateTime !== ""
-      ? { dateTime: fields.startDateTime, timeZone: "UTC" }
-      : null
+    taskBody.startDateTime =
+      !isUpdate || fields.startDateTime !== "" ? { dateTime: fields.startDateTime, timeZone: "UTC" } : null
   }
   if (fields.reminderDateTime !== undefined) {
-    taskBody.reminderDateTime = !isUpdate || fields.reminderDateTime !== ""
-      ? { dateTime: fields.reminderDateTime, timeZone: "UTC" }
-      : null
+    taskBody.reminderDateTime =
+      !isUpdate || fields.reminderDateTime !== "" ? { dateTime: fields.reminderDateTime, timeZone: "UTC" } : null
   }
 
   if (fields.importance !== undefined) taskBody.importance = fields.importance
