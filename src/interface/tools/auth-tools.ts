@@ -229,25 +229,34 @@ async function handleStartDeviceAuth() {
 // ---------------------------------------------------------------------------
 
 export function registerAuthTools(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     "auth-status",
-    "Check if you're authenticated with Microsoft Graph API. Shows current token status and expiration time, and indicates if the token needs to be refreshed.",
-    {},
+    {
+      description:
+        "Check if you're authenticated with Microsoft Graph API. Shows current token status and expiration time, and indicates if the token needs to be refreshed.",
+      inputSchema: {},
+    },
     handleAuthStatus,
   )
 
   if (isDeviceCodeFlow()) {
-    server.tool(
+    server.registerTool(
       "start-device-auth",
-      "Start device code authentication with Microsoft. Displays a user code and verification URL — visit the URL on any device, enter the code, and complete sign-in. Tokens are saved automatically. Use this when you need to authenticate for the first time or when your tokens have expired.",
-      {},
+      {
+        description:
+          "Start device code authentication with Microsoft. Displays a user code and verification URL — visit the URL on any device, enter the code, and complete sign-in. Tokens are saved automatically. Use this when you need to authenticate for the first time or when your tokens have expired.",
+        inputSchema: {},
+      },
       handleStartDeviceAuth,
     )
   } else {
-    server.tool(
+    server.registerTool(
       "start-auth",
-      "Start the Microsoft OAuth authentication flow. Automatically opens your default browser to the authentication page. After you complete authentication, tokens are saved automatically. Use this when you need to authenticate for the first time or when your tokens have expired.",
-      {},
+      {
+        description:
+          "Start the Microsoft OAuth authentication flow. Automatically opens your default browser to the authentication page. After you complete authentication, tokens are saved automatically. Use this when you need to authenticate for the first time or when your tokens have expired.",
+        inputSchema: {},
+      },
       handleStartAuth,
     )
   }

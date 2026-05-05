@@ -145,47 +145,64 @@ function buildSharedView(lists: Array<{ displayName: string; isShared?: boolean;
 // ---------------------------------------------------------------------------
 
 export function registerListTools(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     "get-task-lists",
-    "Get all Microsoft Todo task lists (the top-level containers that organize your tasks). Shows list names, IDs, and indicates default or shared lists.",
-    {},
+    {
+      description:
+        "Get all Microsoft Todo task lists (the top-level containers that organize your tasks). Shows list names, IDs, and indicates default or shared lists.",
+    },
     handleGetTaskLists,
   )
 
-  server.tool(
+  server.registerTool(
     "get-task-lists-organized",
-    "Get all task lists organized into logical folders/categories based on naming patterns, emoji prefixes, and sharing status. Provides a hierarchical view similar to folder organization.",
     {
-      includeIds: z.boolean().optional().describe("Include list IDs in output (default: false)"),
-      groupBy: z
-        .enum(["category", "shared", "type"])
-        .optional()
-        .describe("Grouping strategy - 'category' (default), 'shared', or 'type'"),
+      description:
+        "Get all task lists organized into logical folders/categories based on naming patterns, emoji prefixes, and sharing status. Provides a hierarchical view similar to folder organization.",
+      inputSchema: {
+        includeIds: z.boolean().optional().describe("Include list IDs in output (default: false)"),
+        groupBy: z
+          .enum(["category", "shared", "type"])
+          .optional()
+          .describe("Grouping strategy - 'category' (default), 'shared', or 'type'"),
+      },
     },
     handleGetTaskListsOrganized,
   )
 
-  server.tool(
+  server.registerTool(
     "create-task-list",
-    "Create a new task list (top-level container) in Microsoft Todo to help organize your tasks into categories or projects.",
-    { displayName: z.string().describe("Name of the new task list") },
+    {
+      description:
+        "Create a new task list (top-level container) in Microsoft Todo to help organize your tasks into categories or projects.",
+      inputSchema: {
+        displayName: z.string().describe("Name of the new task list"),
+      },
+    },
     handleCreateTaskList,
   )
 
-  server.tool(
+  server.registerTool(
     "update-task-list",
-    "Update the name of an existing task list (top-level container) in Microsoft Todo.",
     {
-      listId: z.string().describe("ID of the task list to update"),
-      displayName: z.string().describe("New name for the task list"),
+      description: "Update the name of an existing task list (top-level container) in Microsoft Todo.",
+      inputSchema: {
+        listId: z.string().describe("ID of the task list to update"),
+        displayName: z.string().describe("New name for the task list"),
+      },
     },
     handleUpdateTaskList,
   )
 
-  server.tool(
+  server.registerTool(
     "delete-task-list",
-    "Delete a task list (top-level container) from Microsoft Todo. This will remove the list and all tasks within it.",
-    { listId: z.string().describe("ID of the task list to delete") },
+    {
+      description:
+        "Delete a task list (top-level container) from Microsoft Todo. This will remove the list and all tasks within it.",
+      inputSchema: {
+        listId: z.string().describe("ID of the task list to delete"),
+      },
+    },
     handleDeleteTaskList,
   )
 }

@@ -152,48 +152,60 @@ async function handleDeleteChecklistItem({
 // ---------------------------------------------------------------------------
 
 export function registerChecklistTools(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     "get-checklist-items",
-    "Get checklist items (subtasks) for a specific task. Checklist items are smaller steps or components that belong to a parent task.",
     {
-      listId: z.string().describe("ID of the task list"),
-      taskId: z.string().describe("ID of the task"),
+      description:
+        "Get checklist items (subtasks) for a specific task. Checklist items are smaller steps or components that belong to a parent task.",
+      inputSchema: {
+        listId: z.string().describe("ID of the task list"),
+        taskId: z.string().describe("ID of the task"),
+      },
     },
     handleGetChecklistItems,
   )
 
-  server.tool(
+  server.registerTool(
     "create-checklist-item",
-    "Create a new checklist item (subtask) for a task. Checklist items help break down a task into smaller, manageable steps.",
     {
-      listId: z.string().describe("ID of the task list"),
-      taskId: z.string().describe("ID of the task"),
-      displayName: z.string().describe("Text content of the checklist item"),
-      isChecked: z.boolean().optional().describe("Whether the item is checked off"),
+      description:
+        "Create a new checklist item (subtask) for a task. Checklist items help break down a task into smaller, manageable steps.",
+      inputSchema: {
+        listId: z.string().describe("ID of the task list"),
+        taskId: z.string().describe("ID of the task"),
+        displayName: z.string().describe("Text content of the checklist item"),
+        isChecked: z.boolean().optional().describe("Whether the item is checked off"),
+      },
     },
     handleCreateChecklistItem,
   )
 
-  server.tool(
+  server.registerTool(
     "update-checklist-item",
-    "Update an existing checklist item (subtask). Allows changing the text content or completion status of the subtask.",
     {
-      listId: z.string().describe("ID of the task list"),
-      taskId: z.string().describe("ID of the task"),
-      checklistItemId: z.string().describe("ID of the checklist item to update"),
-      displayName: z.string().optional().describe("New text content of the checklist item"),
-      isChecked: z.boolean().optional().describe("Whether the item is checked off"),
+      description:
+        "Update an existing checklist item (subtask). Allows changing the text content or completion status of the subtask.",
+      inputSchema: {
+        listId: z.string().describe("ID of the task list"),
+        taskId: z.string().describe("ID of the task"),
+        checklistItemId: z.string().describe("ID of the checklist item to update"),
+        displayName: z.string().optional().describe("New text content of the checklist item"),
+        isChecked: z.boolean().optional().describe("Whether the item is checked off"),
+      },
     },
     handleUpdateChecklistItem,
   )
 
-  server.tool(
+  server.registerTool(
     "delete-checklist-item",
-    "Delete a checklist item (subtask) from a task. This removes just the specific subtask, not the parent task.",
     {
-      listId: z.string().describe("ID of the task list"),
-      taskId: z.string().describe("ID of the task"),
-      checklistItemId: z.string().describe("ID of the checklist item to delete"),
+      description:
+        "Delete a checklist item (subtask) from a task. This removes just the specific subtask, not the parent task.",
+      inputSchema: {
+        listId: z.string().describe("ID of the task list"),
+        taskId: z.string().describe("ID of the task"),
+        checklistItemId: z.string().describe("ID of the checklist item to delete"),
+      },
     },
     handleDeleteChecklistItem,
   )

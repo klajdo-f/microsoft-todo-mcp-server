@@ -177,67 +177,82 @@ async function handleDeleteTask({ listId, taskId }: { listId: string; taskId: st
 // ---------------------------------------------------------------------------
 
 export function registerTaskTools(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     "get-tasks",
-    "Get tasks from a specific Microsoft Todo list. These are the main todo items that can contain checklist items (subtasks).",
     {
-      listId: listIdSchema,
-      filter: z.string().optional().describe("OData $filter query (e.g., 'status eq \\'completed\\'')"),
-      select: z.string().optional().describe("Comma-separated list of properties to include (e.g., 'id,title,status')"),
-      orderby: z.string().optional().describe("Property to sort by (e.g., 'createdDateTime desc')"),
-      top: z.number().optional().describe("Maximum number of tasks to retrieve"),
-      skip: z.number().optional().describe("Number of tasks to skip"),
-      count: z.boolean().optional().describe("Whether to include a count of tasks"),
+      description:
+        "Get tasks from a specific Microsoft Todo list. These are the main todo items that can contain checklist items (subtasks).",
+      inputSchema: {
+        listId: listIdSchema,
+        filter: z.string().optional().describe("OData $filter query (e.g., 'status eq \\'completed\\'')"),
+        select: z
+          .string()
+          .optional()
+          .describe("Comma-separated list of properties to include (e.g., 'id,title,status')"),
+        orderby: z.string().optional().describe("Property to sort by (e.g., 'createdDateTime desc')"),
+        top: z.number().optional().describe("Maximum number of tasks to retrieve"),
+        skip: z.number().optional().describe("Number of tasks to skip"),
+        count: z.boolean().optional().describe("Whether to include a count of tasks"),
+      },
     },
     handleGetTasks,
   )
 
-  server.tool(
+  server.registerTool(
     "create-task",
-    "Create a new task in a specific Microsoft Todo list. A task is the main todo item that can have a title, description, due date, and other properties.",
     {
-      listId: listIdSchema,
-      title: z.string().describe("Title of the task"),
-      body: taskBodySchema,
-      dueDateTime: dueDateSchema,
-      startDateTime: startDateSchema,
-      importance: importanceSchema,
-      isReminderOn: isReminderOnSchema,
-      reminderDateTime: reminderSchema,
-      status: statusSchema.describe("Status of the task"),
-      categories: categoriesSchema,
+      description:
+        "Create a new task in a specific Microsoft Todo list. A task is the main todo item that can have a title, description, due date, and other properties.",
+      inputSchema: {
+        listId: listIdSchema,
+        title: z.string().describe("Title of the task"),
+        body: taskBodySchema,
+        dueDateTime: dueDateSchema,
+        startDateTime: startDateSchema,
+        importance: importanceSchema,
+        isReminderOn: isReminderOnSchema,
+        reminderDateTime: reminderSchema,
+        status: statusSchema.describe("Status of the task"),
+        categories: categoriesSchema,
+      },
     },
     handleCreateTask,
   )
 
-  server.tool(
+  server.registerTool(
     "update-task",
-    "Update an existing task in Microsoft Todo. Allows changing any properties of the task including title, due date, importance, etc.",
     {
-      listId: listIdSchema,
-      taskId: z.string().describe("ID of the task to update"),
-      title: z.string().optional().describe("New title of the task"),
-      body: z.string().optional().describe("New description or body content of the task"),
-      dueDateTime: z.string().optional().describe("New due date in ISO format (e.g., 2023-12-31T23:59:59Z)"),
-      startDateTime: z.string().optional().describe("New start date in ISO format (e.g., 2023-12-31T23:59:59Z)"),
-      importance: z.enum(["low", "normal", "high"]).optional().describe("New task importance"),
-      isReminderOn: z.boolean().optional().describe("Whether to enable reminder for this task"),
-      reminderDateTime: z.string().optional().describe("New reminder date and time in ISO format"),
-      status: z
-        .enum(["notStarted", "inProgress", "completed", "waitingOnOthers", "deferred"])
-        .optional()
-        .describe("New status of the task"),
-      categories: z.array(z.string()).optional().describe("New categories associated with the task"),
+      description:
+        "Update an existing task in Microsoft Todo. Allows changing any properties of the task including title, due date, importance, etc.",
+      inputSchema: {
+        listId: listIdSchema,
+        taskId: z.string().describe("ID of the task to update"),
+        title: z.string().optional().describe("New title of the task"),
+        body: z.string().optional().describe("New description or body content of the task"),
+        dueDateTime: z.string().optional().describe("New due date in ISO format (e.g., 2023-12-31T23:59:59Z)"),
+        startDateTime: z.string().optional().describe("New start date in ISO format (e.g., 2023-12-31T23:59:59Z)"),
+        importance: z.enum(["low", "normal", "high"]).optional().describe("New task importance"),
+        isReminderOn: z.boolean().optional().describe("Whether to enable reminder for this task"),
+        reminderDateTime: z.string().optional().describe("New reminder date and time in ISO format"),
+        status: z
+          .enum(["notStarted", "inProgress", "completed", "waitingOnOthers", "deferred"])
+          .optional()
+          .describe("New status of the task"),
+        categories: z.array(z.string()).optional().describe("New categories associated with the task"),
+      },
     },
     handleUpdateTask,
   )
 
-  server.tool(
+  server.registerTool(
     "delete-task",
-    "Delete a task from a Microsoft Todo list. This will remove the task and all its checklist items (subtasks).",
     {
-      listId: listIdSchema,
-      taskId: z.string().describe("ID of the task to delete"),
+      description:
+        "Delete a task from a Microsoft Todo list. This will remove the task and all its checklist items (subtasks).",
+      inputSchema: {
+        listId: listIdSchema,
+        taskId: z.string().describe("ID of the task to delete"),
+      },
     },
     handleDeleteTask,
   )

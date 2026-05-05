@@ -108,22 +108,25 @@ function buildArchiveResult(successCount: number, totalCount: number, cutoffDate
 // ---------------------------------------------------------------------------
 
 export function registerArchiveTools(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     "archive-completed-tasks",
-    "Move completed tasks older than a specified number of days from one list to another (archive) list. Useful for cleaning up active lists while preserving historical tasks.",
     {
-      sourceListId: z.string().describe("ID of the source list to archive tasks from"),
-      targetListId: z.string().describe("ID of the target archive list"),
-      olderThanDays: z
-        .number()
-        .min(0)
-        .default(90)
-        .describe("Archive tasks completed more than this many days ago (default: 90)"),
-      dryRun: z
-        .boolean()
-        .optional()
-        .default(false)
-        .describe("If true, only preview what would be archived without making changes"),
+      description:
+        "Move completed tasks older than a specified number of days from one list to another (archive) list. Useful for cleaning up active lists while preserving historical tasks.",
+      inputSchema: {
+        sourceListId: z.string().describe("ID of the source list to archive tasks from"),
+        targetListId: z.string().describe("ID of the target archive list"),
+        olderThanDays: z
+          .number()
+          .min(0)
+          .default(90)
+          .describe("Archive tasks completed more than this many days ago (default: 90)"),
+        dryRun: z
+          .boolean()
+          .optional()
+          .default(false)
+          .describe("If true, only preview what would be archived without making changes"),
+      },
     },
     async ({ sourceListId, targetListId, olderThanDays, dryRun }) => {
       try {

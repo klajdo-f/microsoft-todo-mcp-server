@@ -161,13 +161,16 @@ async function runEndpointsTest(token: string): Promise<string> {
 // ---------------------------------------------------------------------------
 
 export function registerExplorationTools(server: McpServer): void {
-  server.tool(
+  server.registerTool(
     "test-graph-api-exploration",
-    "Test various Graph API queries to discover hidden properties or endpoints for folder/group organization in Microsoft To Do.",
     {
-      testType: z
-        .enum(["odata-select", "odata-expand", "headers", "extensions", "all"])
-        .describe("Type of test to run"),
+      description:
+        "Test various Graph API queries to discover hidden properties or endpoints for folder/group organization in Microsoft To Do.",
+      inputSchema: {
+        testType: z
+          .enum(["odata-select", "odata-expand", "headers", "extensions", "all"])
+          .describe("Type of test to run"),
+      },
     },
     async ({ testType }) => {
       try {
