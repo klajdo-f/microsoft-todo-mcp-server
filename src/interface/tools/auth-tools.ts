@@ -58,10 +58,9 @@ async function handleStartAuth() {
 
     const osc8Open = "\u001b]8;;"
     const osc8Close = "\u0007"
-    logger.info(
-      `[start-auth] ${osc8Open}${authUrl}${osc8Close}🔗 Click here to authenticate${osc8Open}${osc8Close}`,
-      { source: "auth-tools" },
-    )
+    logger.info(`[start-auth] ${osc8Open}${authUrl}${osc8Close}🔗 Click here to authenticate${osc8Open}${osc8Close}`, {
+      source: "auth-tools",
+    })
 
     return {
       content: [

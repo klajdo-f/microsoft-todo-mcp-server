@@ -55,6 +55,59 @@ export class OAuthExchangeError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// Refresh token extraction
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract the refresh token from the serialised MSAL token cache.
+ *
+ * `acquireTokenByCode` stores the refresh token internally rather than
+ * returning it directly. This function probes several known cache section
+ * names used across MSAL versions.
+ */
+function extractRefreshTokenFromCache(serializedCache: Record<string, unknown>): string {
+  // Try standard MSAL cache locations
+  const sections = [
+    serializedCache["RefreshToken"] as Record<string, Record<string, unknown>> | undefined,
+    serializedCache["RefreshTokens"] as Record<string, Record<string, unknown>> | undefined,
+  ]
+
+  for (const section of sections) {
+    if (section && typeof section === "object" && Object.keys(section).length > 0) {
+      const key = Object.keys(section)[0]
+      const entry = section[key]
+      if (entry?.secret && typeof entry.secret === "string") {
+        return entry.secret
+      }
+    }
+  }
+
+  // Fallback: scan for any section containing "refresh"
+  for (const sectionName of Object.keys(serializedCache)) {
+    if (sectionName.toLowerCase().includes("refresh") && typeof serializedCache[sectionName] === "object") {
+      const section = serializedCache[sectionName] as Record<string, Record<string, unknown>>
+      for (const key of Object.keys(section)) {
+        const entry = section[key]
+        if (entry?.secret && typeof entry.secret === "string") {
+          return entry.secret
+        }
+      }
+    }
+  }
+
+  return ""
+}
+
+/**
+ * Safely extract `expiresIn` from an MSAL AuthenticationResult.
+ * The property is not typed in the official interface but is present at runtime.
+ */
+function safeExpiresInSeconds(response: AuthenticationResult): number {
+  const candidate = (response as Record<string, unknown>).expiresIn
+  return typeof candidate === "number" ? candidate : 3600
+}
+
+// ---------------------------------------------------------------------------
 // Engine factory
 // ---------------------------------------------------------------------------
 
@@ -140,43 +193,16 @@ export function createOAuthEngine(options?: {
           redirectUri,
         })
 
-        // Extract refresh token from the MSAL token cache.
-        // acquireTokenByCode doesn't return the refresh token in the
-        // AuthenticationResult directly — it is stored in the internal cache.
         const tokenCache = cca.getTokenCache()
-        const serializedCache = JSON.parse(await tokenCache.serialize())
+        const serializedCache = JSON.parse(await tokenCache.serialize()) as Record<string, unknown>
+        const refreshToken = extractRefreshTokenFromCache(serializedCache)
 
-        let refreshToken: string | null = null
-
-        // Try standard MSAL cache locations
-        if (serializedCache.RefreshToken && Object.keys(serializedCache.RefreshToken).length > 0) {
-          const key = Object.keys(serializedCache.RefreshToken)[0]
-          refreshToken = serializedCache.RefreshToken[key].secret
-        } else if (serializedCache.RefreshTokens && Object.keys(serializedCache.RefreshTokens).length > 0) {
-          const key = Object.keys(serializedCache.RefreshTokens)[0]
-          refreshToken = serializedCache.RefreshTokens[key].secret
-        } else {
-          // Fallback: scan for any section containing "refresh"
-          for (const section of Object.keys(serializedCache)) {
-            if (section.toLowerCase().includes("refresh") && typeof serializedCache[section] === "object") {
-              for (const key of Object.keys(serializedCache[section])) {
-                const entry = serializedCache[section][key]
-                if (entry?.secret) {
-                  refreshToken = entry.secret
-                  break
-                }
-              }
-              if (refreshToken) break
-            }
-          }
-        }
-
-        const expiresInSeconds = (response as any).expiresIn || 3600
+        const expiresInSeconds = safeExpiresInSeconds(response)
         const expiresAt = Date.now() + expiresInSeconds * 1000 - 5 * 60 * 1000
 
         return {
           accessToken: response.accessToken,
-          refreshToken: refreshToken || "",
+          refreshToken,
           expiresAt,
         }
       } catch (error: unknown) {

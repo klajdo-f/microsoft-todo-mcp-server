@@ -32,7 +32,10 @@ async function handleGetTaskLists() {
   }
 }
 
-async function handleGetTaskListsOrganized({ includeIds, groupBy }: {
+async function handleGetTaskListsOrganized({
+  includeIds,
+  groupBy,
+}: {
   includeIds?: boolean
   groupBy?: "category" | "shared" | "type"
 }) {
@@ -60,7 +63,10 @@ async function handleCreateTaskList({ displayName }: { displayName: string }) {
     const response = await listService.createList(displayName)
     return {
       content: [
-        { type: "text" as const, text: `Task list created successfully!\nName: ${response.displayName}\nID: ${response.id}` },
+        {
+          type: "text" as const,
+          text: `Task list created successfully!\nName: ${response.displayName}\nID: ${response.id}`,
+        },
       ],
     }
   } catch (error) {
@@ -72,9 +78,7 @@ async function handleUpdateTaskList({ listId, displayName }: { listId: string; d
   try {
     const response = await listService.updateList(listId, displayName)
     return {
-      content: [
-        { type: "text" as const, text: `Task list updated successfully!\nNew name: ${response.displayName}` },
-      ],
+      content: [{ type: "text" as const, text: `Task list updated successfully!\nNew name: ${response.displayName}` }],
     }
   } catch (error) {
     return handleToolError(error)
@@ -96,7 +100,13 @@ async function handleDeleteTaskList({ listId }: { listId: string }) {
 // Small format helpers
 // ---------------------------------------------------------------------------
 
-function formatListSummary(list: { id: string; displayName: string; wellknownListName?: string; isShared?: boolean; isOwner?: boolean }): string {
+function formatListSummary(list: {
+  id: string
+  displayName: string
+  wellknownListName?: string
+  isShared?: boolean
+  isOwner?: boolean
+}): string {
   let wellKnownInfo = ""
   if (list.wellknownListName && list.wellknownListName !== "none") {
     if (list.wellknownListName === "defaultList") wellKnownInfo = " (Default Tasks List)"
@@ -147,7 +157,10 @@ export function registerListTools(server: McpServer): void {
     "Get all task lists organized into logical folders/categories based on naming patterns, emoji prefixes, and sharing status. Provides a hierarchical view similar to folder organization.",
     {
       includeIds: z.boolean().optional().describe("Include list IDs in output (default: false)"),
-      groupBy: z.enum(["category", "shared", "type"]).optional().describe("Grouping strategy - 'category' (default), 'shared', or 'type'"),
+      groupBy: z
+        .enum(["category", "shared", "type"])
+        .optional()
+        .describe("Grouping strategy - 'category' (default), 'shared', or 'type'"),
     },
     handleGetTaskListsOrganized,
   )

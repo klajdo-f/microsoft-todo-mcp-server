@@ -81,11 +81,14 @@ export function buildPersonalAccountWarning(email: string): string {
  * Build the full auth-status text including expiry, personal-account
  * warnings, and refresh-failure metadata.
  */
-export function formatAuthStatusText(tokens: {
-  expiresAt: number
-  lastRefreshError?: string
-  lastRefreshAttempt?: number
-}, isPersonal: boolean): string {
+export function formatAuthStatusText(
+  tokens: {
+    expiresAt: number
+    lastRefreshError?: string
+    lastRefreshAttempt?: number
+  },
+  isPersonal: boolean,
+): string {
   const isExpired = Date.now() > tokens.expiresAt
   const expiryTime = new Date(tokens.expiresAt).toLocaleString()
 

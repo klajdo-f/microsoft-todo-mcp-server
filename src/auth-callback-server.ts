@@ -5,32 +5,23 @@
  * exchanges it for tokens via `createOAuthEngine`, and saves them via
  * `TokenManager.saveTokens()`.  Designed to be called from the `start-auth`
  * MCP tool.
- *
- * Safety guarantees:
- * - Only one auth flow can be active at a time (concurrent calls close the
- *   previous listener before starting a new one).
- * - OAuth codes, access tokens, and refresh tokens are never logged or
- *   returned in tool responses.
- * - The server auto-shuts down after a configurable timeout (default 2 min).
  */
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "http"
-import { createOAuthEngine, OAuthConfigError, OAuthExchangeError } from "./oauth-engine.js"
+import { createOAuthEngine, type OAuthEngine } from "./oauth-engine.js"
 import { tokenManager, type StoredTokenData } from "./token-manager.js"
 import { logger } from "./infrastructure/logger.js"
+import {
+  portFromRedirectUri, parseQuery, parseClientInfo, CONSUMER_TENANT,
+  sendHtmlResponse, buildSuccessHtml, buildFailureHtml,
+} from "./auth-callback-helpers.js"
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface AuthFlowResult {
-  success: boolean
-  message: string
-}
-
+export interface AuthFlowResult { success: boolean; message: string }
 export interface AuthFlowOptions {
-  /** Maximum time to wait for the callback in milliseconds (default: 120_000). */
   timeoutMs?: number
-  /** Override redirect URI (forwarded to createOAuthEngine). */
   redirectUri?: string
 }
 
@@ -41,75 +32,72 @@ export interface AuthFlowOptions {
 let activeServer: Server | null = null
 let activeTimer: ReturnType<typeof setTimeout> | null = null
 
-/**
- * Shut down any currently active auth flow.
- * Safe to call multiple times.
- */
 function cleanupActiveFlow(): void {
-  if (activeTimer) {
-    clearTimeout(activeTimer)
-    activeTimer = null
-  }
-  if (activeServer) {
-    try {
-      activeServer.close()
-    } catch {
-      // Ignore — server may already be closed
+  if (activeTimer) { clearTimeout(activeTimer); activeTimer = null }
+  if (activeServer) { try { activeServer.close() } catch { /* already closed */ }; activeServer = null }
+}
+
+// ---------------------------------------------------------------------------
+// Callback handler builder
+// ---------------------------------------------------------------------------
+
+function failFlow(
+  res: ServerResponse, resolve: (r: AuthFlowResult) => void, status: number, htmlMsg: string, resultMsg: string,
+  logLevel: "warn" | "error", logMsg: string,
+): void {
+  logger[logLevel](logMsg, { source: "start-auth" })
+  sendHtmlResponse(res, status, buildFailureHtml(htmlMsg))
+  cleanupActiveFlow()
+  resolve({ success: false, message: resultMsg })
+}
+
+const PERSONAL_ACCOUNT_HELP =
+  'Personal Microsoft account detected, but TENANT_ID is set to "organizations" (the default). ' +
+  "The Microsoft identity platform does not allow personal accounts (Outlook.com, Hotmail.com, Live.com, etc.) " +
+  'with the "organizations" endpoint for confidential-client OAuth flows. ' +
+  "To authenticate with a personal account, set the environment variable TENANT_ID=consumers and restart the server, then run start-auth again."
+
+function buildCallbackHandler(
+  engine: OAuthEngine, resolve: (r: AuthFlowResult) => void,
+): (req: IncomingMessage, res: ServerResponse) => void {
+  return (req, res) => {
+    if (!req.url?.startsWith("/callback")) { res.writeHead(404); res.end("Not found"); return }
+    const params = parseQuery(req.url)
+    const { code, error, error_description: errorDesc } = params as Record<string, string>
+
+    if (error) {
+      failFlow(res, resolve, 400, errorDesc || error,
+        `Authentication failed: ${errorDesc || error}. Please try start-auth again.`,
+        "error", `[start-auth] OAuth error in callback: ${error}`)
+      return
     }
-    activeServer = null
-  }
-}
-
-/**
- * Extract the port from a redirect URI string.
- * Defaults to 4040 if parsing fails.
- */
-function portFromRedirectUri(uri: string): number {
-  try {
-    const url = new URL(uri)
-    return parseInt(url.port, 10) || 4040
-  } catch {
-    return 4040
-  }
-}
-
-/**
- * Parse query parameters from a URL string.
- */
-function parseQuery(urlStr: string): Record<string, string> {
-  const params: Record<string, string> = {}
-  try {
-    const url = new URL(urlStr, "http://localhost")
-    url.searchParams.forEach((value, key) => {
-      params[key] = value
-    })
-  } catch {
-    // Fallback: manual parsing
-    const search = urlStr.split("?")[1] || ""
-    for (const pair of search.split("&")) {
-      const [key, value] = pair.split("=")
-      if (key) {
-        params[decodeURIComponent(key)] = value ? decodeURIComponent(value) : ""
-      }
+    if (!code) {
+      failFlow(res, resolve, 400, "No authorization code received.",
+        "No authorization code received in callback. Please try start-auth again.",
+        "warn", "[start-auth] Callback received without authorization code.")
+      return
     }
-  }
-  return params
-}
+    const clientInfo = parseClientInfo(params["client_info"])
+    if (clientInfo?.utid === CONSUMER_TENANT && engine.tenantId === "organizations") {
+      failFlow(res, resolve, 400, PERSONAL_ACCOUNT_HELP, PERSONAL_ACCOUNT_HELP, "warn", `[start-auth] ${PERSONAL_ACCOUNT_HELP}`)
+      return
+    }
 
-/** Microsoft Account (consumer / personal) tenant GUID. */
-const CONSUMER_TENANT = "9188040d-6c67-4c5b-b112-36a304b66dad"
-
-/**
- * Parse client_info from the OAuth callback (Base64Url-encoded JSON).
- * Returns null if missing or malformed.
- */
-function parseClientInfo(value?: string): { uid?: string; utid?: string } | null {
-  if (!value) return null
-  try {
-    const json = Buffer.from(value, "base64url").toString("utf8")
-    return JSON.parse(json)
-  } catch {
-    return null
+    logger.info("[start-auth] Authorization code received. Exchanging for tokens…", { source: "start-auth" })
+    engine.exchangeAuthCode(code)
+      .then((tokenResult) => {
+        tokenManager.saveTokens({ accessToken: tokenResult.accessToken, refreshToken: tokenResult.refreshToken, expiresAt: tokenResult.expiresAt })
+        logger.info("[start-auth] Tokens saved successfully.", { source: "start-auth" })
+        sendHtmlResponse(res, 200, buildSuccessHtml())
+        cleanupActiveFlow()
+        resolve({ success: true, message: "Authentication successful. Tokens saved." })
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        failFlow(res, resolve, 500, `Token exchange failed: ${msg}`,
+          `Token exchange failed: ${msg}. Please try start-auth again.`,
+          "error", `[start-auth] Token exchange failed: ${msg}`)
+      })
   }
 }
 
@@ -117,166 +105,29 @@ function parseClientInfo(value?: string): { uid?: string; utid?: string } | null
 // Public API
 // ---------------------------------------------------------------------------
 
-/**
- * Start an OAuth auth flow:
- * 1. Create an OAuth engine from env vars
- * 2. Generate the authorization URL
- * 3. Start a temporary HTTP callback listener
- * 4. Wait for the callback, exchange the code, save tokens
- *
- * @returns The authorization URL and a promise that resolves when the flow
- *          completes (success or timeout).
- */
 export async function startAuthFlow(
   options?: AuthFlowOptions,
 ): Promise<{ authUrl: string; result: Promise<AuthFlowResult> }> {
   const timeoutMs = options?.timeoutMs ?? 120_000
-
-  // Close any previous flow before starting a new one
   cleanupActiveFlow()
-
-  // 1. Create engine (validates env vars)
   const engine = createOAuthEngine({ redirectUri: options?.redirectUri })
-  const redirectUri = engine.redirectUri
-
-  // 2. Get the authorization URL
   const authUrl = await engine.getAuthUrl()
   logger.info("[start-auth] Authorization URL generated. Waiting for callback…", { source: "start-auth" })
 
-  // 3. Create a promise that resolves when the flow finishes
   const result = new Promise<AuthFlowResult>((resolve) => {
-    const port = portFromRedirectUri(redirectUri)
-
-    const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-      logger.debug(`[start-auth] HTTP request received: ${req.method} ${req.url}`, { source: "start-auth" })
-      // Only handle the callback path
-      if (!req.url?.startsWith("/callback")) {
-        logger.debug("[start-auth] Request path does not match /callback — returning 404", { source: "start-auth" })
-        res.writeHead(404)
-        res.end("Not found")
-        return
-      }
-      logger.debug("[start-auth] Callback path matched, parsing query params…", { source: "start-auth" })
-
-      const params = parseQuery(req.url)
-      logger.debug("[start-auth] Parsed params from callback", { source: "start-auth", params: Object.keys(params) })
-      const code = params["code"]
-      const error = params["error"]
-      const errorDescription = params["error_description"]
-
-      // Send a user-friendly HTML response regardless of outcome
-      const sendHtml = (status: number, html: string) => {
-        res.writeHead(status, { "Content-Type": "text/html" })
-        res.end(html)
-      }
-
-      if (error) {
-        logger.error("[start-auth] OAuth error in callback", { source: "start-auth", error, errorDescription })
-        sendHtml(
-          400,
-          `<html><body><h2>Authentication Failed</h2><p>${errorDescription || error}</p><p>You can close this tab.</p></body></html>`,
-        )
-        cleanupActiveFlow()
-        resolve({
-          success: false,
-          message: `Authentication failed: ${errorDescription || error}. Please try start-auth again.`,
-        })
-        return
-      }
-
-      if (!code) {
-        logger.warn("[start-auth] Callback received without authorization code.", { source: "start-auth" })
-        sendHtml(
-          400,
-          `<html><body><h2>Authentication Failed</h2><p>No authorization code received.</p><p>You can close this tab.</p></body></html>`,
-        )
-        cleanupActiveFlow()
-        resolve({
-          success: false,
-          message: "No authorization code received in callback. Please try start-auth again.",
-        })
-        return
-      }
-
-      // Detect personal-account / tenant mismatch before attempting exchange.
-      const clientInfo = parseClientInfo(params["client_info"])
-      if (clientInfo?.utid === CONSUMER_TENANT && engine.tenantId === "organizations") {
-        const helpMsg =
-          'Personal Microsoft account detected, but TENANT_ID is set to "organizations" (the default). ' +
-          "The Microsoft identity platform does not allow personal accounts (Outlook.com, Hotmail.com, Live.com, etc.) " +
-          'with the "organizations" endpoint for confidential-client OAuth flows. ' +
-          "To authenticate with a personal account, set the environment variable TENANT_ID=consumers and restart the server, then run start-auth again."
-        logger.warn(`[start-auth] ${helpMsg}`, { source: "start-auth" })
-        sendHtml(
-          400,
-          `<html><body><h2>Authentication Failed</h2><p>${helpMsg.replace(/"/g, "&quot;")}</p><p>You can close this tab.</p></body></html>`,
-        )
-        cleanupActiveFlow()
-        resolve({ success: false, message: helpMsg })
-        return
-      }
-
-      // Exchange the code for tokens
-      logger.info("[start-auth] Authorization code received. Exchanging for tokens…", { source: "start-auth" })
-
-      engine
-        .exchangeAuthCode(code)
-        .then((tokenResult) => {
-          const stored: StoredTokenData = {
-            accessToken: tokenResult.accessToken,
-            refreshToken: tokenResult.refreshToken,
-            expiresAt: tokenResult.expiresAt,
-          }
-          tokenManager.saveTokens(stored)
-          logger.info("[start-auth] Tokens saved successfully.", { source: "start-auth" })
-
-          sendHtml(
-            200,
-            `<html><body><h2>✅ Authentication Successful</h2><p>You can close this tab and return to your MCP client.</p></body></html>`,
-          )
-          cleanupActiveFlow()
-          resolve({ success: true, message: "Authentication successful. Tokens saved." })
-        })
-        .catch((err: unknown) => {
-          const msg = err instanceof Error ? err.message : String(err)
-          logger.error("[start-auth] Token exchange failed", { source: "start-auth", error: msg })
-          sendHtml(
-            500,
-            `<html><body><h2>Authentication Failed</h2><p>Token exchange failed.</p><pre>${msg.replace(/</g, "&lt;")}</pre><p>You can close this tab.</p></body></html>`,
-          )
-          cleanupActiveFlow()
-          resolve({
-            success: false,
-            message: `Token exchange failed: ${msg}. Please try start-auth again.`,
-          })
-        })
-    })
-
+    const port = portFromRedirectUri(engine.redirectUri)
+    const server = createServer(buildCallbackHandler(engine, resolve))
     activeServer = server
-
-    // Set up timeout
     activeTimer = setTimeout(() => {
       logger.warn("[start-auth] Timed out waiting for callback.", { source: "start-auth", timeoutMs })
       cleanupActiveFlow()
-      resolve({
-        success: false,
-        message:
-          "Authentication timed out after 2 minutes. The authorization URL may have expired. Please try start-auth again.",
-      })
+      resolve({ success: false, message: "Authentication timed out after 2 minutes. The authorization URL may have expired. Please try start-auth again." })
     }, timeoutMs)
-
-    server.listen(port, () => {
-      logger.info(`[start-auth] Callback server listening on port ${port}`, { source: "start-auth", port })
-    })
-
-    // Handle server errors (e.g., port already in use)
+    server.listen(port, () => logger.info(`[start-auth] Callback server listening on port ${port}`, { source: "start-auth", port }))
     server.on("error", (err: Error) => {
       logger.error("[start-auth] Server error", { source: "start-auth", error: err.message })
       cleanupActiveFlow()
-      resolve({
-        success: false,
-        message: `Could not start callback server: ${err.message}. Check if port ${port} is available.`,
-      })
+      resolve({ success: false, message: `Could not start callback server: ${err.message}. Check if port ${port} is available.` })
     })
   })
 

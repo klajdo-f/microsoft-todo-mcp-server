@@ -43,47 +43,133 @@ function formatTaskItem(task: Task): string {
 }
 
 function buildTaskFieldsFromParams(p: {
-  title?: string; body?: string; dueDateTime?: string; startDateTime?: string;
-  importance?: string; isReminderOn?: boolean; reminderDateTime?: string; status?: string; categories?: string[]
+  title?: string
+  body?: string
+  dueDateTime?: string
+  startDateTime?: string
+  importance?: string
+  isReminderOn?: boolean
+  reminderDateTime?: string
+  status?: string
+  categories?: string[]
 }): TaskFields {
-  return { title: p.title, body: p.body, dueDateTime: p.dueDateTime, startDateTime: p.startDateTime, importance: p.importance, isReminderOn: p.isReminderOn, reminderDateTime: p.reminderDateTime, status: p.status, categories: p.categories }
+  return {
+    title: p.title,
+    body: p.body,
+    dueDateTime: p.dueDateTime,
+    startDateTime: p.startDateTime,
+    importance: p.importance,
+    isReminderOn: p.isReminderOn,
+    reminderDateTime: p.reminderDateTime,
+    status: p.status,
+    categories: p.categories,
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Named handlers
 // ---------------------------------------------------------------------------
 
-async function handleGetTasks(args: { listId: string; filter?: string; select?: string; orderby?: string; top?: number; skip?: number; count?: boolean }) {
+async function handleGetTasks(args: {
+  listId: string
+  filter?: string
+  select?: string
+  orderby?: string
+  top?: number
+  skip?: number
+  count?: boolean
+}) {
   try {
     const response = await taskService.getTasks(args.listId, args)
-    if (response.tasks.length === 0) return { content: [{ type: "text" as const, text: `No tasks found in list with ID: ${args.listId}` }] }
+    if (response.tasks.length === 0)
+      return { content: [{ type: "text" as const, text: `No tasks found in list with ID: ${args.listId}` }] }
     const formatted = response.tasks.map(formatTaskItem).join("\n")
     const countInfo = args.count && response.odataCount !== undefined ? `Total count: ${response.odataCount}\n\n` : ""
     return { content: [{ type: "text" as const, text: `Tasks in list ${args.listId}:\n\n${countInfo}${formatted}` }] }
-  } catch (error) { return handleToolError(error) }
+  } catch (error) {
+    return handleToolError(error)
+  }
 }
 
-async function handleCreateTask(args: { listId: string; title: string; body?: string; dueDateTime?: string; startDateTime?: string; importance?: string; isReminderOn?: boolean; reminderDateTime?: string; status?: string; categories?: string[] }) {
+async function handleCreateTask(args: {
+  listId: string
+  title: string
+  body?: string
+  dueDateTime?: string
+  startDateTime?: string
+  importance?: string
+  isReminderOn?: boolean
+  reminderDateTime?: string
+  status?: string
+  categories?: string[]
+}) {
   try {
     const response = await taskService.createTask(args.listId, buildTaskFieldsFromParams(args))
-    return { content: [{ type: "text" as const, text: `Task created successfully!\nID: ${response.id}\nTitle: ${response.title}` }] }
-  } catch (error) { return handleToolError(error) }
+    return {
+      content: [
+        { type: "text" as const, text: `Task created successfully!\nID: ${response.id}\nTitle: ${response.title}` },
+      ],
+    }
+  } catch (error) {
+    return handleToolError(error)
+  }
 }
 
-async function handleUpdateTask(args: { listId: string; taskId: string; title?: string; body?: string; dueDateTime?: string; startDateTime?: string; importance?: string; isReminderOn?: boolean; reminderDateTime?: string; status?: string; categories?: string[] }) {
+async function handleUpdateTask(args: {
+  listId: string
+  taskId: string
+  title?: string
+  body?: string
+  dueDateTime?: string
+  startDateTime?: string
+  importance?: string
+  isReminderOn?: boolean
+  reminderDateTime?: string
+  status?: string
+  categories?: string[]
+}) {
   try {
-    const hasUpdate = args.title !== undefined || args.body !== undefined || args.dueDateTime !== undefined || args.startDateTime !== undefined || args.importance !== undefined || args.isReminderOn !== undefined || args.reminderDateTime !== undefined || args.status !== undefined || args.categories !== undefined
-    if (!hasUpdate) return { content: [{ type: "text" as const, text: "No properties provided for update. Please specify at least one property to change." }] }
+    const hasUpdate =
+      args.title !== undefined ||
+      args.body !== undefined ||
+      args.dueDateTime !== undefined ||
+      args.startDateTime !== undefined ||
+      args.importance !== undefined ||
+      args.isReminderOn !== undefined ||
+      args.reminderDateTime !== undefined ||
+      args.status !== undefined ||
+      args.categories !== undefined
+    if (!hasUpdate)
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: "No properties provided for update. Please specify at least one property to change.",
+          },
+        ],
+      }
     const response = await taskService.updateTask(args.listId, args.taskId, buildTaskFieldsFromParams(args))
-    return { content: [{ type: "text" as const, text: `Task updated successfully!\nID: ${response.id}\nTitle: ${response.title}` }] }
-  } catch (error) { return handleToolError(error) }
+    return {
+      content: [
+        { type: "text" as const, text: `Task updated successfully!\nID: ${response.id}\nTitle: ${response.title}` },
+      ],
+    }
+  } catch (error) {
+    return handleToolError(error)
+  }
 }
 
 async function handleDeleteTask({ listId, taskId }: { listId: string; taskId: string }) {
   try {
     await taskService.deleteTask(listId, taskId)
-    return { content: [{ type: "text" as const, text: `Task with ID: ${taskId} was successfully deleted from list: ${listId}` }] }
-  } catch (error) { return handleToolError(error) }
+    return {
+      content: [
+        { type: "text" as const, text: `Task with ID: ${taskId} was successfully deleted from list: ${listId}` },
+      ],
+    }
+  } catch (error) {
+    return handleToolError(error)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -91,35 +177,68 @@ async function handleDeleteTask({ listId, taskId }: { listId: string; taskId: st
 // ---------------------------------------------------------------------------
 
 export function registerTaskTools(server: McpServer): void {
-  server.tool("get-tasks", "Get tasks from a specific Microsoft Todo list. These are the main todo items that can contain checklist items (subtasks).", {
-    listId: listIdSchema,
-    filter: z.string().optional().describe("OData $filter query (e.g., 'status eq \\'completed\\'')"),
-    select: z.string().optional().describe("Comma-separated list of properties to include (e.g., 'id,title,status')"),
-    orderby: z.string().optional().describe("Property to sort by (e.g., 'createdDateTime desc')"),
-    top: z.number().optional().describe("Maximum number of tasks to retrieve"),
-    skip: z.number().optional().describe("Number of tasks to skip"),
-    count: z.boolean().optional().describe("Whether to include a count of tasks"),
-  }, handleGetTasks)
+  server.tool(
+    "get-tasks",
+    "Get tasks from a specific Microsoft Todo list. These are the main todo items that can contain checklist items (subtasks).",
+    {
+      listId: listIdSchema,
+      filter: z.string().optional().describe("OData $filter query (e.g., 'status eq \\'completed\\'')"),
+      select: z.string().optional().describe("Comma-separated list of properties to include (e.g., 'id,title,status')"),
+      orderby: z.string().optional().describe("Property to sort by (e.g., 'createdDateTime desc')"),
+      top: z.number().optional().describe("Maximum number of tasks to retrieve"),
+      skip: z.number().optional().describe("Number of tasks to skip"),
+      count: z.boolean().optional().describe("Whether to include a count of tasks"),
+    },
+    handleGetTasks,
+  )
 
-  server.tool("create-task", "Create a new task in a specific Microsoft Todo list. A task is the main todo item that can have a title, description, due date, and other properties.", {
-    listId: listIdSchema, title: z.string().describe("Title of the task"), body: taskBodySchema,
-    dueDateTime: dueDateSchema, startDateTime: startDateSchema, importance: importanceSchema,
-    isReminderOn: isReminderOnSchema, reminderDateTime: reminderSchema, status: statusSchema.describe("Status of the task"), categories: categoriesSchema,
-  }, handleCreateTask)
+  server.tool(
+    "create-task",
+    "Create a new task in a specific Microsoft Todo list. A task is the main todo item that can have a title, description, due date, and other properties.",
+    {
+      listId: listIdSchema,
+      title: z.string().describe("Title of the task"),
+      body: taskBodySchema,
+      dueDateTime: dueDateSchema,
+      startDateTime: startDateSchema,
+      importance: importanceSchema,
+      isReminderOn: isReminderOnSchema,
+      reminderDateTime: reminderSchema,
+      status: statusSchema.describe("Status of the task"),
+      categories: categoriesSchema,
+    },
+    handleCreateTask,
+  )
 
-  server.tool("update-task", "Update an existing task in Microsoft Todo. Allows changing any properties of the task including title, due date, importance, etc.", {
-    listId: listIdSchema, taskId: z.string().describe("ID of the task to update"),
-    title: z.string().optional().describe("New title of the task"), body: z.string().optional().describe("New description or body content of the task"),
-    dueDateTime: z.string().optional().describe("New due date in ISO format (e.g., 2023-12-31T23:59:59Z)"),
-    startDateTime: z.string().optional().describe("New start date in ISO format (e.g., 2023-12-31T23:59:59Z)"),
-    importance: z.enum(["low", "normal", "high"]).optional().describe("New task importance"),
-    isReminderOn: z.boolean().optional().describe("Whether to enable reminder for this task"),
-    reminderDateTime: z.string().optional().describe("New reminder date and time in ISO format"),
-    status: z.enum(["notStarted", "inProgress", "completed", "waitingOnOthers", "deferred"]).optional().describe("New status of the task"),
-    categories: z.array(z.string()).optional().describe("New categories associated with the task"),
-  }, handleUpdateTask)
+  server.tool(
+    "update-task",
+    "Update an existing task in Microsoft Todo. Allows changing any properties of the task including title, due date, importance, etc.",
+    {
+      listId: listIdSchema,
+      taskId: z.string().describe("ID of the task to update"),
+      title: z.string().optional().describe("New title of the task"),
+      body: z.string().optional().describe("New description or body content of the task"),
+      dueDateTime: z.string().optional().describe("New due date in ISO format (e.g., 2023-12-31T23:59:59Z)"),
+      startDateTime: z.string().optional().describe("New start date in ISO format (e.g., 2023-12-31T23:59:59Z)"),
+      importance: z.enum(["low", "normal", "high"]).optional().describe("New task importance"),
+      isReminderOn: z.boolean().optional().describe("Whether to enable reminder for this task"),
+      reminderDateTime: z.string().optional().describe("New reminder date and time in ISO format"),
+      status: z
+        .enum(["notStarted", "inProgress", "completed", "waitingOnOthers", "deferred"])
+        .optional()
+        .describe("New status of the task"),
+      categories: z.array(z.string()).optional().describe("New categories associated with the task"),
+    },
+    handleUpdateTask,
+  )
 
-  server.tool("delete-task", "Delete a task from a Microsoft Todo list. This will remove the task and all its checklist items (subtasks).", {
-    listId: listIdSchema, taskId: z.string().describe("ID of the task to delete"),
-  }, handleDeleteTask)
+  server.tool(
+    "delete-task",
+    "Delete a task from a Microsoft Todo list. This will remove the task and all its checklist items (subtasks).",
+    {
+      listId: listIdSchema,
+      taskId: z.string().describe("ID of the task to delete"),
+    },
+    handleDeleteTask,
+  )
 }

@@ -54,27 +54,55 @@ async function handleGetChecklistItems({ listId, taskId }: { listId: string; tas
   }
 }
 
-async function handleCreateChecklistItem({ listId, taskId, displayName, isChecked }: {
-  listId: string; taskId: string; displayName: string; isChecked?: boolean
+async function handleCreateChecklistItem({
+  listId,
+  taskId,
+  displayName,
+  isChecked,
+}: {
+  listId: string
+  taskId: string
+  displayName: string
+  isChecked?: boolean
 }) {
   try {
     const response = await checklistService.createChecklistItem(listId, taskId, displayName, isChecked)
     return {
-      content: [{ type: "text" as const, text: `Checklist item created successfully!\nContent: ${response.displayName}\nID: ${response.id}` }],
+      content: [
+        {
+          type: "text" as const,
+          text: `Checklist item created successfully!\nContent: ${response.displayName}\nID: ${response.id}`,
+        },
+      ],
     }
   } catch (error) {
     return handleToolError(error)
   }
 }
 
-async function handleUpdateChecklistItem({ listId, taskId, checklistItemId, displayName, isChecked }: {
-  listId: string; taskId: string; checklistItemId: string; displayName?: string; isChecked?: boolean
+async function handleUpdateChecklistItem({
+  listId,
+  taskId,
+  checklistItemId,
+  displayName,
+  isChecked,
+}: {
+  listId: string
+  taskId: string
+  checklistItemId: string
+  displayName?: string
+  isChecked?: boolean
 }) {
   try {
     const hasUpdate = displayName !== undefined || isChecked !== undefined
     if (!hasUpdate) {
       return {
-        content: [{ type: "text" as const, text: "No properties provided for update. Please specify either displayName or isChecked." }],
+        content: [
+          {
+            type: "text" as const,
+            text: "No properties provided for update. Please specify either displayName or isChecked.",
+          },
+        ],
       }
     }
 
@@ -83,20 +111,36 @@ async function handleUpdateChecklistItem({ listId, taskId, checklistItemId, disp
     const statusText = response.isChecked ? "Checked" : "Not checked"
 
     return {
-      content: [{ type: "text" as const, text: `Checklist item updated successfully!\nContent: ${response.displayName}\nStatus: ${statusText}` }],
+      content: [
+        {
+          type: "text" as const,
+          text: `Checklist item updated successfully!\nContent: ${response.displayName}\nStatus: ${statusText}`,
+        },
+      ],
     }
   } catch (error) {
     return handleToolError(error)
   }
 }
 
-async function handleDeleteChecklistItem({ listId, taskId, checklistItemId }: {
-  listId: string; taskId: string; checklistItemId: string
+async function handleDeleteChecklistItem({
+  listId,
+  taskId,
+  checklistItemId,
+}: {
+  listId: string
+  taskId: string
+  checklistItemId: string
 }) {
   try {
     await checklistService.deleteChecklistItem(listId, taskId, checklistItemId)
     return {
-      content: [{ type: "text" as const, text: `Checklist item with ID: ${checklistItemId} was successfully deleted from task: ${taskId}` }],
+      content: [
+        {
+          type: "text" as const,
+          text: `Checklist item with ID: ${checklistItemId} was successfully deleted from task: ${taskId}`,
+        },
+      ],
     }
   } catch (error) {
     return handleToolError(error)
