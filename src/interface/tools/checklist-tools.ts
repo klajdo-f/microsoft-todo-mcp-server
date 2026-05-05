@@ -3,26 +3,111 @@
  *
  * Registers the `get-checklist-items`, `create-checklist-item`,
  * `update-checklist-item`, and `delete-checklist-item` tools on an
- * McpServer instance.  All Zod schemas, descriptions, and response
- * shapes are preserved from the original todo-index.ts god file.
- *
- * Inline Graph API logic has been replaced with calls to the
- * corresponding application service methods.
+ * McpServer instance.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { z } from "zod"
 import * as checklistService from "../../application/checklist-service.js"
 import type { ChecklistItemFields } from "../../application/checklist-service.js"
+import type { ChecklistItem } from "../../domain/entities.js"
 import { handleToolError } from "../error-handler.js"
+
+// ---------------------------------------------------------------------------
+// Formatting helpers
+// ---------------------------------------------------------------------------
+
+function formatChecklistItem(item: ChecklistItem): string {
+  const status = item.isChecked ? "✓" : "○"
+  let itemInfo = `${status} ${item.displayName} (ID: ${item.id})`
+
+  if (item.createdDateTime) {
+    itemInfo += `\nCreated: ${new Date(item.createdDateTime).toLocaleString()}`
+  }
+
+  return itemInfo
+}
+
+function formatChecklistItemsResponse(taskTitle: string, taskId: string, items: ChecklistItem[]): string {
+  const formatted = items.map(formatChecklistItem).join("\n\n")
+  return `Checklist items for task "${taskTitle}" (ID: ${taskId}):\n\n${formatted}`
+}
+
+// ---------------------------------------------------------------------------
+// Named handlers
+// ---------------------------------------------------------------------------
+
+async function handleGetChecklistItems({ listId, taskId }: { listId: string; taskId: string }) {
+  try {
+    const { taskTitle, items } = await checklistService.getChecklistItems(listId, taskId)
+
+    if (items.length === 0) {
+      return {
+        content: [{ type: "text" as const, text: `No checklist items found for task "${taskTitle}" (ID: ${taskId})` }],
+      }
+    }
+
+    return {
+      content: [{ type: "text" as const, text: formatChecklistItemsResponse(taskTitle, taskId, items) }],
+    }
+  } catch (error) {
+    return handleToolError(error)
+  }
+}
+
+async function handleCreateChecklistItem({ listId, taskId, displayName, isChecked }: {
+  listId: string; taskId: string; displayName: string; isChecked?: boolean
+}) {
+  try {
+    const response = await checklistService.createChecklistItem(listId, taskId, displayName, isChecked)
+    return {
+      content: [{ type: "text" as const, text: `Checklist item created successfully!\nContent: ${response.displayName}\nID: ${response.id}` }],
+    }
+  } catch (error) {
+    return handleToolError(error)
+  }
+}
+
+async function handleUpdateChecklistItem({ listId, taskId, checklistItemId, displayName, isChecked }: {
+  listId: string; taskId: string; checklistItemId: string; displayName?: string; isChecked?: boolean
+}) {
+  try {
+    const hasUpdate = displayName !== undefined || isChecked !== undefined
+    if (!hasUpdate) {
+      return {
+        content: [{ type: "text" as const, text: "No properties provided for update. Please specify either displayName or isChecked." }],
+      }
+    }
+
+    const fields: ChecklistItemFields = { displayName, isChecked }
+    const response = await checklistService.updateChecklistItem(listId, taskId, checklistItemId, fields)
+    const statusText = response.isChecked ? "Checked" : "Not checked"
+
+    return {
+      content: [{ type: "text" as const, text: `Checklist item updated successfully!\nContent: ${response.displayName}\nStatus: ${statusText}` }],
+    }
+  } catch (error) {
+    return handleToolError(error)
+  }
+}
+
+async function handleDeleteChecklistItem({ listId, taskId, checklistItemId }: {
+  listId: string; taskId: string; checklistItemId: string
+}) {
+  try {
+    await checklistService.deleteChecklistItem(listId, taskId, checklistItemId)
+    return {
+      content: [{ type: "text" as const, text: `Checklist item with ID: ${checklistItemId} was successfully deleted from task: ${taskId}` }],
+    }
+  } catch (error) {
+    return handleToolError(error)
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Tool registration
 // ---------------------------------------------------------------------------
 
 export function registerChecklistTools(server: McpServer): void {
-  // -----------------------------------------------------------------------
-  // get-checklist-items
-  // -----------------------------------------------------------------------
   server.tool(
     "get-checklist-items",
     "Get checklist items (subtasks) for a specific task. Checklist items are smaller steps or components that belong to a parent task.",
@@ -30,52 +115,9 @@ export function registerChecklistTools(server: McpServer): void {
       listId: z.string().describe("ID of the task list"),
       taskId: z.string().describe("ID of the task"),
     },
-    async ({ listId, taskId }) => {
-      try {
-        const response = await checklistService.getChecklistItems(listId, taskId)
-
-        const { taskTitle, items } = response
-
-        if (items.length === 0) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `No checklist items found for task "${taskTitle}" (ID: ${taskId})`,
-              },
-            ],
-          }
-        }
-
-        const formattedItems = items.map((item) => {
-          const status = item.isChecked ? "✓" : "○"
-          let itemInfo = `${status} ${item.displayName} (ID: ${item.id})`
-
-          if (item.createdDateTime) {
-            const createdDate = new Date(item.createdDateTime).toLocaleString()
-            itemInfo += `\nCreated: ${createdDate}`
-          }
-
-          return itemInfo
-        })
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Checklist items for task "${taskTitle}" (ID: ${taskId}):\n\n${formattedItems.join("\n\n")}`,
-            },
-          ],
-        }
-      } catch (error) {
-        return handleToolError(error)
-      }
-    },
+    handleGetChecklistItems,
   )
 
-  // -----------------------------------------------------------------------
-  // create-checklist-item
-  // -----------------------------------------------------------------------
   server.tool(
     "create-checklist-item",
     "Create a new checklist item (subtask) for a task. Checklist items help break down a task into smaller, manageable steps.",
@@ -85,27 +127,9 @@ export function registerChecklistTools(server: McpServer): void {
       displayName: z.string().describe("Text content of the checklist item"),
       isChecked: z.boolean().optional().describe("Whether the item is checked off"),
     },
-    async ({ listId, taskId, displayName, isChecked }) => {
-      try {
-        const response = await checklistService.createChecklistItem(listId, taskId, displayName, isChecked)
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Checklist item created successfully!\nContent: ${response.displayName}\nID: ${response.id}`,
-            },
-          ],
-        }
-      } catch (error) {
-        return handleToolError(error)
-      }
-    },
+    handleCreateChecklistItem,
   )
 
-  // -----------------------------------------------------------------------
-  // update-checklist-item
-  // -----------------------------------------------------------------------
   server.tool(
     "update-checklist-item",
     "Update an existing checklist item (subtask). Allows changing the text content or completion status of the subtask.",
@@ -116,45 +140,9 @@ export function registerChecklistTools(server: McpServer): void {
       displayName: z.string().optional().describe("New text content of the checklist item"),
       isChecked: z.boolean().optional().describe("Whether the item is checked off"),
     },
-    async ({ listId, taskId, checklistItemId, displayName, isChecked }) => {
-      try {
-        const fields: ChecklistItemFields = { displayName, isChecked }
-
-        // Check that at least one property was explicitly provided
-        const hasUpdate = displayName !== undefined || isChecked !== undefined
-
-        if (!hasUpdate) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "No properties provided for update. Please specify either displayName or isChecked.",
-              },
-            ],
-          }
-        }
-
-        const response = await checklistService.updateChecklistItem(listId, taskId, checklistItemId, fields)
-
-        const statusText = response.isChecked ? "Checked" : "Not checked"
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Checklist item updated successfully!\nContent: ${response.displayName}\nStatus: ${statusText}`,
-            },
-          ],
-        }
-      } catch (error) {
-        return handleToolError(error)
-      }
-    },
+    handleUpdateChecklistItem,
   )
 
-  // -----------------------------------------------------------------------
-  // delete-checklist-item
-  // -----------------------------------------------------------------------
   server.tool(
     "delete-checklist-item",
     "Delete a checklist item (subtask) from a task. This removes just the specific subtask, not the parent task.",
@@ -163,21 +151,6 @@ export function registerChecklistTools(server: McpServer): void {
       taskId: z.string().describe("ID of the task"),
       checklistItemId: z.string().describe("ID of the checklist item to delete"),
     },
-    async ({ listId, taskId, checklistItemId }) => {
-      try {
-        await checklistService.deleteChecklistItem(listId, taskId, checklistItemId)
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Checklist item with ID: ${checklistItemId} was successfully deleted from task: ${taskId}`,
-            },
-          ],
-        }
-      } catch (error) {
-        return handleToolError(error)
-      }
-    },
+    handleDeleteChecklistItem,
   )
 }
