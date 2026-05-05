@@ -44,6 +44,7 @@ vi.mock("../../src/token-manager.js", () => ({
 import { startAuthFlow } from "../../src/auth-callback-server.js"
 import { createOAuthEngine } from "../../src/oauth-engine.js"
 import { tokenManager } from "../../src/token-manager.js"
+import { buildSuccessHtml } from "../../src/auth-callback-helpers.js"
 
 // Typed reference to the mocked saveTokens
 const mockSaveTokens = vi.mocked(tokenManager.saveTokens)
@@ -329,10 +330,12 @@ describe("auth-callback-server", () => {
 
       expect(response.status).toBe(400)
       expect(response.body).toContain("Personal Microsoft account detected")
+      expect(response.body).toContain("Microsoft 365 developer tenant")
 
       const flowResult = await result
       expect(flowResult.success).toBe(false)
       expect(flowResult.message).toContain("TENANT_ID=consumers")
+      expect(flowResult.message).toContain("Microsoft 365 developer tenant")
       expect(mockExchange).not.toHaveBeenCalled()
     })
 
@@ -361,10 +364,68 @@ describe("auth-callback-server", () => {
       const response = await httpGet(`http://localhost:${port}/callback?code=real-code&client_info=${clientInfo}`)
 
       expect(response.status).toBe(200)
+      expect(response.body).toContain("Authentication Successful")
+      expect(response.body).toContain("Personal Microsoft account detected")
       expect(mockExchange).toHaveBeenCalledWith("real-code")
+
+      // verify isPersonalAccount was saved
+      expect(mockSaveTokens).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accessToken: "at-test",
+          refreshToken: "rt-test",
+          isPersonalAccount: true,
+        }),
+      )
 
       const flowResult = await result
       expect(flowResult.success).toBe(true)
+      expect(flowResult.message).toContain("Personal Microsoft account detected")
+    })
+
+    it("does not flag isPersonalAccount for work/school accounts", async () => {
+      const redirectUri = uniqueRedirectUri()
+      const port = new URL(redirectUri).port
+      const mockExchange = vi.fn().mockResolvedValue({
+        accessToken: "at-test",
+        refreshToken: "rt-test",
+        expiresAt: Date.now() + 3600 * 1000,
+      })
+      vi.mocked(createOAuthEngine).mockImplementation(
+        () =>
+          ({
+            getAuthUrl: vi.fn().mockResolvedValue("https://example.com/auth"),
+            exchangeAuthCode: mockExchange,
+            redirectUri,
+            tenantId: "organizations",
+          }) as any,
+      )
+
+      const { result } = await startAuthFlow({ redirectUri })
+
+      // client_info with utid that is NOT the consumer tenant GUID
+      const clientInfo =
+        "eyJ1aWQiOiIwMDAwMDAwMC0wMDAwLTAwMDAtZjU0ZS0xN2VmOWJmM2I1NWQiLCJ1dGlkIjoiM2ExN2JjZDYtY2QxMy00YzZiLWFjZDctMjNlZTFlMjA1ZmJlIn0"
+      const response = await httpGet(`http://localhost:${port}/callback?code=real-code&client_info=${clientInfo}`)
+
+      expect(response.status).toBe(200)
+      expect(response.body).toContain("Authentication Successful")
+      // No warning block for non-consumer accounts
+      expect(response.body).not.toContain("Personal Microsoft account detected")
+      expect(mockExchange).toHaveBeenCalledWith("real-code")
+
+      // verify isPersonalAccount is NOT present
+      expect(mockSaveTokens).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accessToken: "at-test",
+          refreshToken: "rt-test",
+        }),
+      )
+      const saveCall = (mockSaveTokens as ReturnType<typeof vi.fn>).mock.calls[0][0]
+      expect(saveCall.isPersonalAccount).toBeUndefined()
+
+      const flowResult = await result
+      expect(flowResult.success).toBe(true)
+      expect(flowResult.message).not.toContain("Personal Microsoft account detected")
     })
   })
 
@@ -385,6 +446,24 @@ describe("auth-callback-server", () => {
       // Clean up by triggering a callback
       await httpGet(`http://localhost:${port}/callback?code=cleanup`)
       await result
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // buildSuccessHtml
+  // -------------------------------------------------------------------------
+  describe("buildSuccessHtml", () => {
+    it("renders a warning block when a warning is provided", () => {
+      const html = buildSuccessHtml("Test warning message")
+      expect(html).toContain("Test warning message")
+      expect(html).toContain("⚠️ Warning")
+      expect(html).toContain("Authentication Successful")
+    })
+
+    it("renders without a warning block when no warning is provided", () => {
+      const html = buildSuccessHtml()
+      expect(html).toContain("Authentication Successful")
+      expect(html).not.toContain("⚠️ Warning")
     })
   })
 

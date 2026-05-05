@@ -85,9 +85,14 @@ export function sendHtmlResponse(
 
 /**
  * Build the success HTML page shown after a successful token exchange.
+ * Optionally renders a warning block (e.g. for personal-account limitations).
  */
-export function buildSuccessHtml(): string {
-  return `<html><body><h2>✅ Authentication Successful</h2><p>You can close this tab and return to your MCP client.</p></body></html>`
+export function buildSuccessHtml(warning?: string): string {
+  const warningBlock = warning
+    ? `<div style="margin:16px 0;padding:12px;border:1px solid #f0a000;background:#fff8e1;border-radius:4px;color:#6d4c00;"><strong>⚠️ Warning:</strong> ${warning.replace(/</g, "&lt;").replace(/"/g, "&quot;")}</div>`
+    : ""
+
+  return `<html><body><h2>✅ Authentication Successful</h2>${warningBlock}<p>You can close this tab and return to your MCP client.</p></body></html>`
 }
 
 /**

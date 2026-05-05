@@ -42,9 +42,16 @@ function formatMailboxError(error: MailboxNotEnabledError): ToolErrorResponse {
         type: "text",
         text:
           `[MAILBOX_NOT_ENABLED] ${error.message}\n\n` +
-          `This error typically occurs with personal Microsoft accounts (Outlook.com, Hotmail, etc.). ` +
-          `The Microsoft To Do API is only available for Microsoft 365 work/school accounts. ` +
-          `Please use a work or school account instead.`,
+          `This error occurs with personal Microsoft accounts (Outlook.com, Hotmail, etc.) because ` +
+          `the Microsoft To Do API requires a Microsoft 365 mailbox, which personal accounts do not have.\n\n` +
+          `To resolve this, try one of the following:\n\n` +
+          `1. Sign up for a free Microsoft 365 developer tenant at ` +
+          `https://developer.microsoft.com/microsoft-365/dev-program — this gives you a work/school ` +
+          `account with full Graph API access, including To Do, at no cost.\n\n` +
+          `2. Use an existing work or school Microsoft 365 account instead of your personal account. ` +
+          `Re-run start-auth and sign in with your organizational credentials.\n\n` +
+          `3. Use the Microsoft To Do web app at https://to-do.microsoft.com or the mobile apps ` +
+          `(available on iOS and Android) — these support personal accounts natively.`,
       },
     ],
   }

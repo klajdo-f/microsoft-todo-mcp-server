@@ -25,6 +25,7 @@ export interface TokenData {
 }
 
 export interface StoredTokenData extends TokenData {
+  isPersonalAccount?: boolean
   lastRefreshError?: string
   lastRefreshAttempt?: number
 }
@@ -153,6 +154,7 @@ export class TokenRepository {
         accessToken: data.access_token,
         refreshToken: data.refresh_token || refreshToken,
         expiresAt: Date.now() + data.expires_in * 1000 - 5 * 60 * 1000, // 5 min buffer
+        isPersonalAccount: this.currentTokens?.isPersonalAccount,
       }
 
       // Clear any previous error on success

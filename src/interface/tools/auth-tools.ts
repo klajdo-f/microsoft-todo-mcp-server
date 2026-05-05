@@ -10,7 +10,7 @@ import { OAuthConfigError } from "../../oauth-engine.js"
 import { openBrowser } from "../../open-browser.js"
 import { handleToolError } from "../error-handler.js"
 import { logger } from "../../infrastructure/logger.js"
-import { isPersonalMicrosoftAccount, formatAuthStatusText } from "./auth-helpers.js"
+import { formatAuthStatusText } from "./auth-helpers.js"
 
 // ---------------------------------------------------------------------------
 // Named handlers
@@ -30,7 +30,7 @@ async function handleAuthStatus() {
     }
   }
 
-  const isPersonal = await isPersonalMicrosoftAccount()
+  const isPersonal = tokens?.isPersonalAccount === true
   const text = formatAuthStatusText(tokens, isPersonal)
   return { content: [{ type: "text" as const, text }] }
 }
@@ -80,6 +80,8 @@ async function handleStartAuth() {
             "",
             "After you complete authentication, your tokens will be saved automatically.",
             "You can verify your status with the auth-status tool.",
+            "",
+            "Note: If you authenticate with a personal Microsoft account (Outlook.com, Hotmail.com, Live.com, etc.), Microsoft To Do API access may be unavailable through the Microsoft Graph API. This is a Microsoft platform restriction, not an authentication issue.",
           ].join("\n"),
         },
       ],

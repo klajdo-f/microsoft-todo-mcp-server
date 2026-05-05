@@ -33,6 +33,33 @@ describe("handleToolError", () => {
     expect(text).toContain("personal")
   })
 
+  it("formats MailboxNotEnabledError with three actionable alternatives", () => {
+    const result = handleToolError(new MailboxNotEnabledError("MailboxNotEnabledForRESTAPI"))
+    const text = result.content[0].text
+
+    // Machine-readable prefix
+    expect(text).toContain("[MAILBOX_NOT_ENABLED]")
+
+    // Alternative 1: free Microsoft 365 developer tenant
+    expect(text).toContain("developer.microsoft.com/microsoft-365/dev-program")
+    expect(text).toContain("developer tenant")
+
+    // Alternative 2: use a work or school account
+    expect(text).toContain("work or school")
+    expect(text).toContain("start-auth")
+
+    // Alternative 3: use To Do web or mobile apps
+    expect(text).toContain("to-do.microsoft.com")
+    expect(text).toContain("mobile")
+  })
+
+  it("MailboxNotEnabledError response is a single text entry", () => {
+    const result = handleToolError(new MailboxNotEnabledError("MailboxNotEnabledForRESTAPI"))
+
+    expect(result.content).toHaveLength(1)
+    expect(result.content[0].type).toBe("text")
+  })
+
   it("formats PermissionDeniedError with permission guidance", () => {
     const result = handleToolError(new PermissionDeniedError("Insufficient privileges"))
     const text = result.content[0].text

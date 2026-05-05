@@ -250,6 +250,27 @@ describe("TokenManager", () => {
       expect(writeFileSync).toHaveBeenCalled()
     })
 
+    it("preserves isPersonalAccount on successful refresh", async () => {
+      mockFetchSuccess(REFRESH_RESPONSE)
+      process.env.CLIENT_ID = "env-cid"
+      process.env.CLIENT_SECRET = "env-csec"
+      process.env.TENANT_ID = "env-tenant"
+
+      const tokensWithFlag = { ...VALID_TOKENS, isPersonalAccount: true }
+      mockTokenFile(tokensWithFlag)
+      await tm.getTokens()
+
+      const result = await tm.refreshToken("rt-456")
+
+      expect(result).not.toBeNull()
+
+      // Verify writeFileSync preserved isPersonalAccount
+      const writeCalls = (writeFileSync as ReturnType<typeof vi.fn>).mock.calls
+      const lastWrite = writeCalls[writeCalls.length - 1]
+      const persisted = JSON.parse(lastWrite[1] as string)
+      expect(persisted.isPersonalAccount).toBe(true)
+    })
+
     it("reads client credentials from env vars", async () => {
       const tokensWithoutCreds = {
         accessToken: "at-123",

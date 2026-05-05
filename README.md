@@ -271,13 +271,60 @@ pnpm run lint         # Run linting checks
 - **Build System**: tsup for fast TypeScript compilation
 - **Module System**: ESM (ECMAScript modules)
 
+## Personal Microsoft Accounts
+
+Personal Microsoft accounts (Outlook.com, Hotmail, Live) have **limited access** to the Microsoft To Do API through Microsoft Graph. This is a **Microsoft service limitation** — not a bug in this server. Work and school accounts have full API access.
+
+### How the Server Helps
+
+This server detects and communicates the personal account limitation proactively:
+
+1. **Detection at sign-in** — When you complete the `start-auth` flow, the server checks whether your account is a personal Microsoft account and stores that information in your token metadata.
+2. **Warning via `auth-status`** — Running `auth-status` shows your account type (personal or work/school) so you can verify at any time.
+3. **Actionable error messages** — If you use a data tool (e.g., `get-task-lists`) with a personal account, the server returns a `[MAILBOX_NOT_ENABLED]` error with a clear explanation and a link to this section.
+
+### Alternatives for Personal Account Users
+
+You have three options to get full Microsoft To Do API access:
+
+#### Option 1 — Sign Up for a Free Microsoft 365 Developer Tenant (Recommended)
+
+Microsoft offers a free developer program that includes a Microsoft 365 tenant with full Graph API access. This is the best option for personal account users who want to use this server.
+
+**Step-by-step instructions:**
+
+1. Visit the [Microsoft 365 Developer Program](https://developer.microsoft.com/microsoft-365/dev-program) page.
+2. Sign in with your existing Microsoft account (personal or otherwise).
+3. Click **Join now** to enroll in the developer program (free, no credit card required).
+4. After joining, click **Set up E5 subscription** to create a free developer tenant.
+5. Complete the setup form — you'll choose a tenant domain name (e.g., `yourname.onmicrosoft.com`).
+6. Once the tenant is provisioned, you'll receive a work account (e.g., `admin@yourname.onmicrosoft.com`).
+7. [Register a new Azure App](#azure-app-registration) in this developer tenant, making sure to set the redirect URI to `http://localhost:4040/callback` and add the required Graph API permissions (`Tasks.Read`, `Tasks.ReadWrite`, `User.Read`).
+8. Update your MCP client configuration with the new `CLIENT_ID`, `CLIENT_SECRET`, and set `TENANT_ID` to your developer tenant GUID (found in the Azure Portal under **Overview**).
+9. Run `start-auth` and sign in with your new developer tenant account.
+
+#### Option 2 — Use an Existing Work or School Account
+
+If you have a Microsoft 365 account through your employer or school:
+
+1. Update your MCP client configuration and set `TENANT_ID` to `organizations`.
+2. Run `start-auth` and sign in with your work or school account.
+3. Your organization's account has full To Do API access.
+
+#### Option 3 — Use the Microsoft To Do App Directly
+
+If you don't need programmatic access and just want to manage your tasks:
+
+- **Web**: [https://to-do.microsoft.com](https://to-do.microsoft.com)
+- **iOS**: Download Microsoft To Do from the App Store
+- **Android**: Download Microsoft To Do from Google Play
+- **Windows**: Available in the Microsoft Store
+
+The web and mobile apps work with personal accounts and provide the full To Do experience.
+
+---
+
 ## Limitations & Known Issues
-
-### Personal Microsoft Accounts
-
-- **MailboxNotEnabledForRESTAPI Error**: Personal Microsoft accounts (outlook.com, hotmail.com, live.com) have limited access to the To Do API through Microsoft Graph
-- This is a Microsoft service limitation, not an issue with this server
-- Work/school accounts have full API access
 
 ### API Limitations
 

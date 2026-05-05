@@ -78,7 +78,10 @@ const PERSONAL_ACCOUNT_HELP =
   'Personal Microsoft account detected, but TENANT_ID is set to "organizations" (the default). ' +
   "The Microsoft identity platform does not allow personal accounts (Outlook.com, Hotmail.com, Live.com, etc.) " +
   'with the "organizations" endpoint for confidential-client OAuth flows. ' +
-  "To authenticate with a personal account, set the environment variable TENANT_ID=consumers and restart the server, then run start-auth again."
+  "To fix this:\n\n" +
+  "1. Set the environment variable TENANT_ID=consumers and restart the server, then run start-auth again.\n" +
+  "2. Sign up for a free Microsoft 365 developer tenant at https://developer.microsoft.com/microsoft-365/dev-program " +
+  "and use that tenant ID instead (provides full API access)."
 
 function buildCallbackHandler(
   engine: OAuthEngine,
@@ -135,15 +138,28 @@ function buildCallbackHandler(
     engine
       .exchangeAuthCode(code)
       .then((tokenResult) => {
+        const isPersonal = clientInfo?.utid === CONSUMER_TENANT
+        const warning = isPersonal
+          ? "Personal Microsoft account detected. Some Microsoft Graph features (e.g. shared task lists) may be unavailable for personal accounts. " +
+            "To get full API access, consider: (1) using a work/school account, or (2) signing up for a free Microsoft 365 developer tenant at https://developer.microsoft.com/microsoft-365/dev-program."
+          : undefined
+
         tokenManager.saveTokens({
           accessToken: tokenResult.accessToken,
           refreshToken: tokenResult.refreshToken,
           expiresAt: tokenResult.expiresAt,
+          isPersonalAccount: isPersonal || undefined,
         })
-        logger.info("[start-auth] Tokens saved successfully.", { source: "start-auth" })
-        sendHtmlResponse(res, 200, buildSuccessHtml())
+        logger.info("[start-auth] Tokens saved successfully." + (isPersonal ? " (personal account)" : ""), {
+          source: "start-auth",
+          isPersonalAccount: isPersonal,
+        })
+        sendHtmlResponse(res, 200, buildSuccessHtml(warning))
         cleanupActiveFlow()
-        resolve({ success: true, message: "Authentication successful. Tokens saved." })
+        resolve({
+          success: true,
+          message: warning ? `Authentication successful. ${warning}` : "Authentication successful. Tokens saved.",
+        })
       })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err)
