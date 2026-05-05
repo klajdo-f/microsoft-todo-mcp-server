@@ -22,11 +22,11 @@ If you haven't already, register an application in the [Azure Portal](https://po
 2. Click **New registration**.
 3. **Name:** e.g., `MCP-Graph-Integration`.
 4. **Supported account types:** This is the most critical step for a Hotmail account. You **must** select:
-   * *Accounts in any organizational directory (Any Microsoft Entra ID tenant - Multitenant) and personal Microsoft accounts (e.g. Skype, Xbox)* **OR**
-   * *Personal Microsoft accounts only*.
+   - _Accounts in any organizational directory (Any Microsoft Entra ID tenant - Multitenant) and personal Microsoft accounts (e.g. Skype, Xbox)_ **OR**
+   - _Personal Microsoft accounts only_.
 5. **Redirect URI:**
-   * If you are using the **Authorization Code Flow** (spinning up a local HTTP server to catch the callback), set it to `Web` or `Single-page application` and use `http://localhost:3000/callback` (or your preferred port).
-   * If you plan to use the **Device Authorization Grant** (best for headless CLI/MCP server processes), leave this blank for now, but under your app's **Authentication** menu, enable **Allow public client flows**.
+   - If you are using the **Authorization Code Flow** (spinning up a local HTTP server to catch the callback), set it to `Web` or `Single-page application` and use `http://localhost:3000/callback` (or your preferred port).
+   - If you plan to use the **Device Authorization Grant** (best for headless CLI/MCP server processes), leave this blank for now, but under your app's **Authentication** menu, enable **Allow public client flows**.
 6. Once created, save your **Application (client) ID**.
 7. If using the Authorization Code flow, go to **Certificates & secrets** and create a **New client secret**. Save this value immediately.
 
@@ -37,9 +37,9 @@ Scopes dictate what your MCP server is allowed to read and write. Because you ar
 Your required `scope` string will be:
 `User.Read Calendars.ReadWrite Tasks.ReadWrite offline_access`
 
-* `Calendars.ReadWrite`: Grants access to your Outlook/Hotmail Calendar.
-* `Tasks.ReadWrite`: Grants access to your Microsoft To Do tasks.
-* `offline_access`: Yields a **Refresh Token** alongside your Access Token. Your MCP server will securely store this to silently mint new access tokens when they expire.
+- `Calendars.ReadWrite`: Grants access to your Outlook/Hotmail Calendar.
+- `Tasks.ReadWrite`: Grants access to your Microsoft To Do tasks.
+- `offline_access`: Yields a **Refresh Token** alongside your Access Token. Your MCP server will securely store this to silently mint new access tokens when they expire.
 
 ## Step 3: Implement the OAuth 2.0 Flow
 
@@ -50,7 +50,7 @@ For a personal account, you must use the `consumers` or `common` tenant endpoint
 This avoids needing a local web server for redirects. The server outputs a code, you type it into a browser, and the server polls for the token.
 
 1. **Request Device Code:**
-`POST https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode`
+   `POST https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode`
 
 ```x-www-form-urlencoded
   client_id=${CLIENT_ID}
@@ -58,7 +58,7 @@ This avoids needing a local web server for redirects. The server outputs a code,
 ```
 
 1. **Poll for Token:**
-`POST https://login.microsoftonline.com/consumers/oauth2/v2.0/token`
+   `POST https://login.microsoftonline.com/consumers/oauth2/v2.0/token`
 
 ```x-www-form-urlencoded
 grant_type=urn:ietf:params:oauth:grant-type:device_code
@@ -69,9 +69,9 @@ device_code=DEVICE_CODE_FROM_PREVIOUS_STEP
 ### Option B: Authorization Code Flow (Standard web flow)
 
 1. **Get Authorization Code (Browser redirect):**
-`GET https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?client_id=${CLIENT_ID}&response_type=code&redirect_uri=http://localhost:4040/callback&scope=User.Read Calendars.ReadWrite Tasks.ReadWrite offline_access`
+   `GET https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?client_id=${CLIENT_ID}&response_type=code&redirect_uri=http://localhost:4040/callback&scope=User.Read Calendars.ReadWrite Tasks.ReadWrite offline_access`
 2. **Exchange Code for Token:**
-`POST https://login.microsoftonline.com/consumers/oauth2/v2.0/token`
+   `POST https://login.microsoftonline.com/consumers/oauth2/v2.0/token`
 
 ```x-www-form-urlencoded
 client_id=${CLIENT_ID}
@@ -90,13 +90,13 @@ Once you have the `access_token`, include it in the header of all Graph API requ
 
 Microsoft To Do is accessed via the `todo` endpoints in the Graph API v1.0.
 
-* **List Task Lists:**
-`GET https://graph.microsoft.com/v1.0/me/todo/lists`
-*(Note: You need the `id` of a specific list to fetch or create tasks inside it.)*
-* **List Tasks in a List:**
-`GET https://graph.microsoft.com/v1.0/me/todo/lists/{list-id}/tasks?$filter=status ne 'completed'`
-* **Create a Task:**
-`POST https://graph.microsoft.com/v1.0/me/todo/lists/{list-id}/tasks`
+- **List Task Lists:**
+  `GET https://graph.microsoft.com/v1.0/me/todo/lists`
+  _(Note: You need the `id` of a specific list to fetch or create tasks inside it.)_
+- **List Tasks in a List:**
+  `GET https://graph.microsoft.com/v1.0/me/todo/lists/{list-id}/tasks?$filter=status ne 'completed'`
+- **Create a Task:**
+  `POST https://graph.microsoft.com/v1.0/me/todo/lists/{list-id}/tasks`
 
 ```json
 {
@@ -115,11 +115,11 @@ Microsoft To Do is accessed via the `todo` endpoints in the Graph API v1.0.
 
 #### 2. Outlook Calendar API
 
-* **List Events (Next 7 Days):**
-Use the `calendarView` endpoint instead of `events` to automatically expand recurring events.
-`GET https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=2026-05-05T00:00:00Z&endDateTime=2026-05-12T00:00:00Z`
-* **Create a Calendar Event:**
-`POST https://graph.microsoft.com/v1.0/me/events`
+- **List Events (Next 7 Days):**
+  Use the `calendarView` endpoint instead of `events` to automatically expand recurring events.
+  `GET https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=2026-05-05T00:00:00Z&endDateTime=2026-05-12T00:00:00Z`
+- **Create a Calendar Event:**
+  `POST https://graph.microsoft.com/v1.0/me/events`
 
 ```json
 {
@@ -150,4 +150,4 @@ grant_type=refresh_token
 refresh_token=YOUR_STORED_REFRESH_TOKEN
 ```
 
-Always store the *new* refresh token returned by this call, as Microsoft Identity may rotate refresh tokens for security purposes. Store this configuration in a local `.env` or secure JSON keystore that your MCP server process can read/write to at runtime.
+Always store the _new_ refresh token returned by this call, as Microsoft Identity may rotate refresh tokens for security purposes. Store this configuration in a local `.env` or secure JSON keystore that your MCP server process can read/write to at runtime.
