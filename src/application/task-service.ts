@@ -44,6 +44,52 @@ export interface GetTasksResponse {
 }
 
 /**
+ * Build a Graph API task request body from the provided fields.
+ *
+ * @param isUpdate - When true, empty-string dates are mapped to `null`
+ *   (clear the field) and `body` is included even when undefined.
+ *   When false, fields are only included when truthy/defined.
+ */
+function buildTaskBodyFromFields(fields: TaskFields, isUpdate: boolean): Record<string, unknown> {
+  const taskBody: Record<string, unknown> = {}
+
+  if (fields.title !== undefined) taskBody.title = fields.title
+
+  // Body content: update includes even undefined (to clear), create only when truthy
+  if (isUpdate ? fields.body !== undefined : fields.body) {
+    taskBody.body = { content: fields.body!, contentType: "text" }
+  }
+
+  // Date fields: update maps empty string to null (clear), create always sets dateTime/timeZone
+  if (fields.dueDateTime !== undefined) {
+    taskBody.dueDateTime = !isUpdate || fields.dueDateTime !== ""
+      ? { dateTime: fields.dueDateTime, timeZone: "UTC" }
+      : null
+  }
+  if (fields.startDateTime !== undefined) {
+    taskBody.startDateTime = !isUpdate || fields.startDateTime !== ""
+      ? { dateTime: fields.startDateTime, timeZone: "UTC" }
+      : null
+  }
+  if (fields.reminderDateTime !== undefined) {
+    taskBody.reminderDateTime = !isUpdate || fields.reminderDateTime !== ""
+      ? { dateTime: fields.reminderDateTime, timeZone: "UTC" }
+      : null
+  }
+
+  if (fields.importance !== undefined) taskBody.importance = fields.importance
+  if (fields.isReminderOn !== undefined) taskBody.isReminderOn = fields.isReminderOn
+  if (fields.status !== undefined) taskBody.status = fields.status
+
+  // Categories: create only includes when non-empty; update always includes (allows clearing)
+  if (isUpdate ? fields.categories !== undefined : fields.categories && fields.categories.length > 0) {
+    taskBody.categories = fields.categories
+  }
+
+  return taskBody
+}
+
+/**
  * Fetch tasks from a specific task list.
  *
  * Builds OData query parameters from the options and returns the
@@ -81,44 +127,7 @@ export async function getTasks(listId: string, options?: GetTasksOptions): Promi
  */
 export async function createTask(listId: string, fields: TaskFields): Promise<Task> {
   const token = await getAccessToken()
-
-  const taskBody: Record<string, unknown> = {}
-
-  if (fields.title !== undefined) {
-    taskBody.title = fields.title
-  }
-
-  if (fields.body) {
-    taskBody.body = { content: fields.body, contentType: "text" }
-  }
-
-  if (fields.dueDateTime) {
-    taskBody.dueDateTime = { dateTime: fields.dueDateTime, timeZone: "UTC" }
-  }
-
-  if (fields.startDateTime) {
-    taskBody.startDateTime = { dateTime: fields.startDateTime, timeZone: "UTC" }
-  }
-
-  if (fields.importance) {
-    taskBody.importance = fields.importance
-  }
-
-  if (fields.isReminderOn !== undefined) {
-    taskBody.isReminderOn = fields.isReminderOn
-  }
-
-  if (fields.reminderDateTime) {
-    taskBody.reminderDateTime = { dateTime: fields.reminderDateTime, timeZone: "UTC" }
-  }
-
-  if (fields.status) {
-    taskBody.status = fields.status
-  }
-
-  if (fields.categories && fields.categories.length > 0) {
-    taskBody.categories = fields.categories
-  }
+  const taskBody = buildTaskBodyFromFields(fields, false)
 
   return (await makeGraphRequest<Task>(`${MS_GRAPH_BASE}/me/todo/lists/${listId}/tasks`, token, "POST", taskBody))!
 }
@@ -133,45 +142,7 @@ export async function createTask(listId: string, fields: TaskFields): Promise<Ta
  */
 export async function updateTask(listId: string, taskId: string, fields: TaskFields): Promise<Task> {
   const token = await getAccessToken()
-
-  const taskBody: Record<string, unknown> = {}
-
-  if (fields.title !== undefined) {
-    taskBody.title = fields.title
-  }
-
-  if (fields.body !== undefined) {
-    taskBody.body = { content: fields.body, contentType: "text" }
-  }
-
-  if (fields.dueDateTime !== undefined) {
-    taskBody.dueDateTime = fields.dueDateTime === "" ? null : { dateTime: fields.dueDateTime, timeZone: "UTC" }
-  }
-
-  if (fields.startDateTime !== undefined) {
-    taskBody.startDateTime = fields.startDateTime === "" ? null : { dateTime: fields.startDateTime, timeZone: "UTC" }
-  }
-
-  if (fields.importance !== undefined) {
-    taskBody.importance = fields.importance
-  }
-
-  if (fields.isReminderOn !== undefined) {
-    taskBody.isReminderOn = fields.isReminderOn
-  }
-
-  if (fields.reminderDateTime !== undefined) {
-    taskBody.reminderDateTime =
-      fields.reminderDateTime === "" ? null : { dateTime: fields.reminderDateTime, timeZone: "UTC" }
-  }
-
-  if (fields.status !== undefined) {
-    taskBody.status = fields.status
-  }
-
-  if (fields.categories !== undefined) {
-    taskBody.categories = fields.categories
-  }
+  const taskBody = buildTaskBodyFromFields(fields, true)
 
   if (Object.keys(taskBody).length === 0) {
     throw new ValidationError("No fields provided for task update. At least one field must be specified.")

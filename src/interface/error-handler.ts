@@ -22,6 +22,73 @@ export type ToolErrorResponse = {
   content: Array<{ type: "text"; text: string }>
 }
 
+/** Format an AuthError into an MCP response. */
+function formatAuthError(): ToolErrorResponse {
+  return {
+    content: [
+      {
+        type: "text",
+        text: `[AUTH_ERROR] Not authenticated. Please use the start-auth tool first to authenticate with Microsoft.`,
+      },
+    ],
+  }
+}
+
+/** Format a MailboxNotEnabledError into an MCP response. */
+function formatMailboxError(error: MailboxNotEnabledError): ToolErrorResponse {
+  return {
+    content: [
+      {
+        type: "text",
+        text:
+          `[MAILBOX_NOT_ENABLED] ${error.message}\n\n` +
+          `This error typically occurs with personal Microsoft accounts (Outlook.com, Hotmail, etc.). ` +
+          `The Microsoft To Do API is only available for Microsoft 365 work/school accounts. ` +
+          `Please use a work or school account instead.`,
+      },
+    ],
+  }
+}
+
+/** Format a PermissionDeniedError into an MCP response. */
+function formatPermissionError(error: PermissionDeniedError): ToolErrorResponse {
+  return {
+    content: [
+      {
+        type: "text",
+        text:
+          `[PERMISSION_DENIED] ${error.message}\n\n` +
+          `Your account lacks the required Microsoft Graph permissions. ` +
+          `An administrator may need to grant consent for the Tasks.ReadWrite scope.`,
+      },
+    ],
+  }
+}
+
+/** Format a GraphApiError into an MCP response, including a truncated response body excerpt. */
+function formatGraphApiError(error: GraphApiError): ToolErrorResponse {
+  let text = `[GRAPH_API_ERROR] ${error.message} (HTTP ${error.status})`
+  if (error.responseBody) {
+    const excerpt = error.responseBody.length > 300 ? error.responseBody.substring(0, 300) + "…" : error.responseBody
+    text += `\n\nResponse: ${excerpt}`
+  }
+  return { content: [{ type: "text", text }] }
+}
+
+/** Format a NetworkError into an MCP response. */
+function formatNetworkError(error: NetworkError): ToolErrorResponse {
+  return {
+    content: [
+      {
+        type: "text",
+        text:
+          `[NETWORK_ERROR] ${error.message}\n\n` +
+          `Could not reach the Microsoft Graph API. Check your internet connection and try again.`,
+      },
+    ],
+  }
+}
+
 /**
  * Convert a caught error into a structured MCP tool response.
  *
@@ -30,86 +97,16 @@ export type ToolErrorResponse = {
  * through to a generic catch-all.
  */
 export function handleToolError(error: unknown): ToolErrorResponse {
-  // --- Typed domain exceptions ------------------------------------------------
-
-  if (error instanceof AuthError) {
-    return {
-      content: [
-        {
-          type: "text",
-          text: `[AUTH_ERROR] Not authenticated. Please use the start-auth tool first to authenticate with Microsoft.`,
-        },
-      ],
-    }
-  }
-
-  if (error instanceof MailboxNotEnabledError) {
-    return {
-      content: [
-        {
-          type: "text",
-          text:
-            `[MAILBOX_NOT_ENABLED] ${error.message}\n\n` +
-            `This error typically occurs with personal Microsoft accounts (Outlook.com, Hotmail, etc.). ` +
-            `The Microsoft To Do API is only available for Microsoft 365 work/school accounts. ` +
-            `Please use a work or school account instead.`,
-        },
-      ],
-    }
-  }
-
-  if (error instanceof PermissionDeniedError) {
-    return {
-      content: [
-        {
-          type: "text",
-          text:
-            `[PERMISSION_DENIED] ${error.message}\n\n` +
-            `Your account lacks the required Microsoft Graph permissions. ` +
-            `An administrator may need to grant consent for the Tasks.ReadWrite scope.`,
-        },
-      ],
-    }
-  }
-
-  if (error instanceof GraphApiError) {
-    let text = `[GRAPH_API_ERROR] ${error.message} (HTTP ${error.status})`
-    if (error.responseBody) {
-      // Surface a truncated excerpt of the Graph API error body
-      const excerpt = error.responseBody.length > 300 ? error.responseBody.substring(0, 300) + "…" : error.responseBody
-      text += `\n\nResponse: ${excerpt}`
-    }
-    return { content: [{ type: "text", text }] }
-  }
-
-  if (error instanceof NetworkError) {
-    return {
-      content: [
-        {
-          type: "text",
-          text:
-            `[NETWORK_ERROR] ${error.message}\n\n` +
-            `Could not reach the Microsoft Graph API. Check your internet connection and try again.`,
-        },
-      ],
-    }
-  }
-
+  if (error instanceof AuthError) return formatAuthError()
+  if (error instanceof MailboxNotEnabledError) return formatMailboxError(error)
+  if (error instanceof PermissionDeniedError) return formatPermissionError(error)
+  if (error instanceof GraphApiError) return formatGraphApiError(error)
+  if (error instanceof NetworkError) return formatNetworkError(error)
   if (error instanceof ValidationError) {
-    return {
-      content: [{ type: "text", text: `[VALIDATION_ERROR] ${error.message}` }],
-    }
+    return { content: [{ type: "text", text: `[VALIDATION_ERROR] ${error.message}` }] }
   }
-
-  // --- Generic fallback --------------------------------------------------------
-
   if (error instanceof Error) {
-    return {
-      content: [{ type: "text", text: `Error: ${error.message}` }],
-    }
+    return { content: [{ type: "text", text: `Error: ${error.message}` }] }
   }
-
-  return {
-    content: [{ type: "text", text: `An unexpected error occurred: ${String(error)}` }],
-  }
+  return { content: [{ type: "text", text: `An unexpected error occurred: ${String(error)}` }] }
 }

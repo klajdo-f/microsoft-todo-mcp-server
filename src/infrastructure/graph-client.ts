@@ -28,6 +28,113 @@ import {
 export const MS_GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 export const USER_AGENT = "microsoft-todo-mcp-server/1.0"
 
+/** Build standard Graph API request headers with bearer token. */
+function buildGraphRequestHeaders(token: string): Record<string, string> {
+  return {
+    "User-Agent": USER_AGENT,
+    Accept: "application/json",
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  }
+}
+
+/** Build RequestInit, attaching JSON body for POST/PATCH methods. */
+function buildRequestInit(
+  method: string,
+  headers: Record<string, string>,
+  body?: unknown,
+): RequestInit {
+  const options: RequestInit = { method, headers }
+  if (body && (method === "POST" || method === "PATCH")) {
+    options.body = JSON.stringify(body)
+  }
+  return options
+}
+
+/** Log request details with redacted auth header for debugging. */
+function logRequest(url: string, method: string, headers: Record<string, string>): void {
+  logger.debug(`Making request to: ${url}`, { source: "graph-client", method })
+  logger.debug(
+    `Request options: ${JSON.stringify({ method, headers: { ...headers, Authorization: "Bearer [REDACTED]" } })}`,
+    { source: "graph-client" },
+  )
+}
+
+/**
+ * Execute a fetch, retrying once with a refreshed token on 401.
+ *
+ * Returns the final Response (which may still be non-ok).
+ */
+async function fetchWithRetryOn401(
+  url: string,
+  options: RequestInit,
+  headers: Record<string, string>,
+  token: string,
+): Promise<Response> {
+  let response = await fetch(url, options)
+
+  if (response.status === 401) {
+    logger.info("Got 401, attempting token refresh...", { source: "graph-client" })
+    const newToken = await getAccessToken()
+    if (newToken !== token) {
+      headers.Authorization = `Bearer ${newToken}`
+      response = await fetch(url, { ...options, headers })
+    }
+  }
+
+  return response
+}
+
+/**
+ * Classify a non-ok Graph API response into a typed domain exception.
+ *
+ * Inspects status code and response body to throw the most specific
+ * McpError subclass.  Always throws — return type is `never`.
+ */
+function classifyGraphError(status: number, errorText: string): never {
+  if (errorText.includes("MailboxNotEnabledForRESTAPI")) {
+    logger.warn("MailboxNotEnabledForRESTAPI detected for personal account", { source: "graph-client", status })
+    throw new MailboxNotEnabledError(
+      "Microsoft To Do API is not available for personal Microsoft accounts. " +
+        "Only Microsoft 365 business accounts have API access.",
+      { status },
+    )
+  }
+  if (status === 401) {
+    throw new AuthError("Authentication failed after token refresh. Please re-authenticate.", { status })
+  }
+  if (status === 403) {
+    throw new PermissionDeniedError("Insufficient permissions for this operation. Check required scopes.", {
+      status,
+      body: errorText,
+    })
+  }
+  throw new GraphApiError(`Graph API error: ${status}`, status, errorText)
+}
+
+/**
+ * Parse a successful Graph API response body.
+ *
+ * Returns `null` for 204 No Content or empty bodies; otherwise parses
+ * JSON text and returns the typed result.
+ */
+async function parseResponseBody<T>(response: Response): Promise<T | null> {
+  if (response.status === 204) {
+    logger.debug("Received 204 No Content — returning null", { source: "graph-client" })
+    return null as T
+  }
+
+  const text = await response.text()
+  if (!text || text.trim().length === 0) {
+    logger.debug("Empty response body — returning null", { source: "graph-client" })
+    return null as T
+  }
+
+  const data = JSON.parse(text)
+  logger.debug(`Response received: ${JSON.stringify(data).substring(0, 200)}...`, { source: "graph-client" })
+  return data as T
+}
+
 /**
  * Make an authenticated request to the Microsoft Graph API.
  *
@@ -41,47 +148,12 @@ export async function makeGraphRequest<T>(
   method = "GET",
   body?: unknown,
 ): Promise<T | null> {
-  const headers: Record<string, string> = {
-    "User-Agent": USER_AGENT,
-    Accept: "application/json",
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json",
-  }
+  const headers = buildGraphRequestHeaders(token)
 
   try {
-    const options: RequestInit = {
-      method,
-      headers,
-    }
-
-    if (body && (method === "POST" || method === "PATCH")) {
-      options.body = JSON.stringify(body)
-    }
-
-    logger.debug(`Making request to: ${url}`, { source: "graph-client", method })
-    logger.debug(
-      `Request options: ${JSON.stringify({
-        method,
-        headers: {
-          ...headers,
-          Authorization: "Bearer [REDACTED]",
-        },
-      })}`,
-      { source: "graph-client" },
-    )
-
-    let response = await fetch(url, options)
-
-    // If we get a 401, try to refresh the token and retry once
-    if (response.status === 401) {
-      logger.info("Got 401, attempting token refresh...", { source: "graph-client" })
-      const newToken = await getAccessToken()
-      if (newToken !== token) {
-        // Retry with new token
-        headers.Authorization = `Bearer ${newToken}`
-        response = await fetch(url, { ...options, headers })
-      }
-    }
+    const options = buildRequestInit(method, headers, body)
+    logRequest(url, method, headers)
+    const response = await fetchWithRetryOn401(url, options, headers, token)
 
     if (!response.ok) {
       const errorText = await response.text()
@@ -89,59 +161,12 @@ export async function makeGraphRequest<T>(
         source: "graph-client",
         status: response.status,
       })
-
-      // Check for the specific MailboxNotEnabledForRESTAPI error
-      if (errorText.includes("MailboxNotEnabledForRESTAPI")) {
-        logger.warn(`MailboxNotEnabledForRESTAPI detected for personal account`, {
-          source: "graph-client",
-          status: response.status,
-        })
-        throw new MailboxNotEnabledError(
-          "Microsoft To Do API is not available for personal Microsoft accounts. " +
-            "Only Microsoft 365 business accounts have API access.",
-          { status: response.status },
-        )
-      }
-
-      // Map HTTP status to typed exceptions
-      if (response.status === 401) {
-        throw new AuthError("Authentication failed after token refresh. Please re-authenticate.", {
-          status: response.status,
-        })
-      }
-
-      if (response.status === 403) {
-        throw new PermissionDeniedError("Insufficient permissions for this operation. Check required scopes.", {
-          status: response.status,
-          body: errorText,
-        })
-      }
-
-      throw new GraphApiError(`Graph API error: ${response.status}`, response.status, errorText)
+      classifyGraphError(response.status, errorText)
     }
 
-    // Guard: 204 No Content or empty body — skip JSON parsing
-    if (response.status === 204) {
-      logger.debug("Received 204 No Content — returning null", { source: "graph-client" })
-      return null as T
-    }
-
-    const text = await response.text()
-    if (!text || text.trim().length === 0) {
-      logger.debug("Empty response body — returning null", { source: "graph-client" })
-      return null as T
-    }
-
-    const data = JSON.parse(text)
-    logger.debug(`Response received: ${JSON.stringify(data).substring(0, 200)}...`, { source: "graph-client" })
-    return data as T
+    return parseResponseBody<T>(response)
   } catch (error) {
-    // Rethrow already-typed domain exceptions
-    if (error instanceof McpError) {
-      throw error
-    }
-
-    // Wrap unexpected failures as NetworkError
+    if (error instanceof McpError) throw error
     logger.error("Network/transport error in Graph API request:", {
       source: "graph-client",
       error: error instanceof Error ? error.message : String(error),

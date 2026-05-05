@@ -43,52 +43,66 @@ export class TokenRepository {
     logger.debug(`Token file path: ${this.tokenFilePath}`, { source: "token-repository" })
   }
 
-  async getTokens(): Promise<StoredTokenData | null> {
-    // Check stored token file
-    if (existsSync(this.tokenFilePath)) {
-      try {
-        const data = readFileSync(this.tokenFilePath, "utf8")
-        this.currentTokens = JSON.parse(data)
+  /**
+   * Read and parse tokens from the configured token file path.
+   *
+   * Returns parsed tokens or null if the file doesn't exist or can't be parsed.
+   */
+  private readTokensFromFile(): StoredTokenData | null {
+    if (!existsSync(this.tokenFilePath)) return null
 
-        if (this.currentTokens) {
-          // Check if expired
-          if (Date.now() > this.currentTokens.expiresAt) {
-            // Try to refresh
-            const refreshed = await this.refreshToken(this.currentTokens.refreshToken)
-            if (refreshed) {
-              return refreshed
-            }
-          }
-          return this.currentTokens
-        }
-      } catch (error) {
-        logger.error("Error reading token file:", {
-          source: "token-repository",
-          error: error instanceof Error ? error.message : String(error),
-        })
-      }
+    try {
+      const data = readFileSync(this.tokenFilePath, "utf8")
+      this.currentTokens = JSON.parse(data)
+      return this.currentTokens
+    } catch (error) {
+      logger.error("Error reading token file:", {
+        source: "token-repository",
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return null
     }
+  }
 
-    // Check legacy token file location (one-time migration)
+  /**
+   * Attempt one-time migration from the legacy tokens.json location.
+   *
+   * Reads from `process.cwd()/tokens.json`, saves to the new platform-specific
+   * path, and returns the migrated tokens.  Returns null if the legacy file
+   * doesn't exist or can't be parsed.
+   */
+  private migrateLegacyTokens(): StoredTokenData | null {
     const legacyPath = join(process.cwd(), "tokens.json")
-    if (existsSync(legacyPath)) {
-      try {
-        const data = readFileSync(legacyPath, "utf8")
-        const tokens = JSON.parse(data)
+    if (!existsSync(legacyPath)) return null
 
-        // Migrate to new location
-        this.saveTokens(tokens)
+    try {
+      const data = readFileSync(legacyPath, "utf8")
+      const tokens: StoredTokenData = JSON.parse(data)
+      this.saveTokens(tokens)
+      return tokens
+    } catch (error) {
+      logger.error("Error reading legacy token file:", {
+        source: "token-repository",
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return null
+    }
+  }
 
-        return tokens
-      } catch (error) {
-        logger.error("Error reading legacy token file:", {
-          source: "token-repository",
-          error: error instanceof Error ? error.message : String(error),
-        })
+  async getTokens(): Promise<StoredTokenData | null> {
+    const tokens = this.readTokensFromFile()
+
+    if (tokens) {
+      // Check if expired
+      if (Date.now() > tokens.expiresAt) {
+        const refreshed = await this.refreshToken(tokens.refreshToken)
+        if (refreshed) return refreshed
       }
+      return tokens
     }
 
-    return null
+    // One-time migration from legacy token file location
+    return this.migrateLegacyTokens()
   }
 
   async refreshToken(refreshToken: string): Promise<TokenData | null> {
