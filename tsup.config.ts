@@ -2,12 +2,7 @@ import { defineConfig } from 'tsup'
 
 export default defineConfig({
   entry: [
-    'src/todo-index.ts',
-    'src/cli.ts',
-    'src/oauth-engine.ts',
-    'src/token-manager.ts',
-    'src/paths.ts',
-    'src/graph-client.ts',
+    'src/*.ts'
   ],
   outDir: 'dist',
   format: ['esm'],
