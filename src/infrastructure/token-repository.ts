@@ -1,225 +1,137 @@
 /**
- * Token repository — infrastructure-layer token persistence and refresh.
+ * Token repository — thin MSAL bridge for token acquisition and refresh.
  *
- * Manages OAuth token lifecycle: read from disk, proactive refresh,
- * save to disk, and failure-metadata persistence.  All credential values
- * (CLIENT_ID, CLIENT_SECRET, TENANT_ID) are read exclusively from
- * process.env at runtime (env-only model per MEM016).
+ * Loads the MSAL serialized cache via MsalCachePersistence, delegates token
+ * refresh to acquireTokenSilent(), and returns a minimal TokenData shape.
+ * No manual HTTP refresh, no legacy migration, no personal-account detection.
  *
- * This module is the canonical implementation; `src/token-manager.ts`
- * re-exports it as a backward-compatible wrapper.
+ * This module is the canonical implementation; consumers import via
+ * `./token-repository.js`.
  */
-import { readFileSync, writeFileSync, existsSync } from "fs"
-import { join } from "path"
-import { getTokenFilePath } from "../paths.js"
-import { isDeviceCodeFlow } from "../auth-flow-config.js"
+import { createMsalClient, DELEGATED_SCOPES, MsalConfigError } from "./msal-client.js"
+import { MsalCachePersistence } from "./cache-persistence.js"
 import { logger } from "./logger.js"
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+/** Minimal token data returned to callers. */
 export interface TokenData {
   accessToken: string
-  refreshToken: string
   expiresAt: number
 }
 
-export interface StoredTokenData extends TokenData {
-  isPersonalAccount?: boolean
-  lastRefreshError?: string
-  lastRefreshAttempt?: number
-}
+/** On-disk shape — plain alias with no extra fields. */
+export type StoredTokenData = TokenData
 
 // ---------------------------------------------------------------------------
 // TokenRepository
 // ---------------------------------------------------------------------------
 
 export class TokenRepository {
-  private tokenFilePath: string
-  private currentTokens: StoredTokenData | null = null
+  private cachePersistence: MsalCachePersistence
 
-  constructor() {
-    // Use shared platform-specific path utilities
-    this.tokenFilePath = getTokenFilePath()
-    logger.debug(`Token file path: ${this.tokenFilePath}`, { source: "token-repository" })
+  constructor(cachePersistence?: MsalCachePersistence) {
+    this.cachePersistence = cachePersistence ?? new MsalCachePersistence()
   }
 
   /**
-   * Read and parse tokens from the configured token file path.
+   * Acquire an access token silently via MSAL.
    *
-   * Returns parsed tokens or null if the file doesn't exist or can't be parsed.
+   * Loads the serialized cache from disk, deserializes it into an MSAL app,
+   * and calls acquireTokenSilent(). On success, the updated cache is
+   * persisted back to disk. Returns null when no cached account exists
+   * or when silent acquisition fails.
    */
-  private readTokensFromFile(): StoredTokenData | null {
-    if (!existsSync(this.tokenFilePath)) return null
+  async getTokens(): Promise<TokenData | null> {
+    // Step 1: Load serialized cache from disk
+    const serialized = this.cachePersistence.load()
 
+    // Step 2: Create MSAL client (catch config errors → null)
+    let msalClient
     try {
-      const data = readFileSync(this.tokenFilePath, "utf8")
-      this.currentTokens = JSON.parse(data)
-      return this.currentTokens
+      msalClient = createMsalClient()
     } catch (error) {
-      logger.error("Error reading token file:", {
-        source: "token-repository",
-        error: error instanceof Error ? error.message : String(error),
-      })
-      return null
-    }
-  }
-
-  /**
-   * Attempt one-time migration from the legacy tokens.json location.
-   *
-   * Reads from `process.cwd()/tokens.json`, saves to the new platform-specific
-   * path, and returns the migrated tokens.  Returns null if the legacy file
-   * doesn't exist or can't be parsed.
-   */
-  private migrateLegacyTokens(): StoredTokenData | null {
-    const legacyPath = join(process.cwd(), "tokens.json")
-    if (!existsSync(legacyPath)) return null
-
-    try {
-      const data = readFileSync(legacyPath, "utf8")
-      const tokens: StoredTokenData = JSON.parse(data)
-      this.saveTokens(tokens)
-      return tokens
-    } catch (error) {
-      logger.error("Error reading legacy token file:", {
-        source: "token-repository",
-        error: error instanceof Error ? error.message : String(error),
-      })
-      return null
-    }
-  }
-
-  async getTokens(): Promise<StoredTokenData | null> {
-    const tokens = this.readTokensFromFile()
-
-    if (tokens) {
-      // Check if expired
-      if (Date.now() > tokens.expiresAt) {
-        const refreshed = await this.refreshToken(tokens.refreshToken)
-        if (refreshed) return refreshed
+      if (error instanceof MsalConfigError) {
+        logger.warn("MSAL client configuration missing, cannot acquire token", {
+          source: "token-repository",
+          error: error.message,
+        })
+        return null
       }
-      return tokens
+      throw error
     }
 
-    // One-time migration from legacy token file location
-    return this.migrateLegacyTokens()
-  }
-
-  async refreshToken(refreshToken: string): Promise<TokenData | null> {
-    // Client credentials come exclusively from process.env (env-only model)
-    const clientId = process.env.CLIENT_ID
-    const clientSecret = process.env.CLIENT_SECRET
-    const tenantId = process.env.TENANT_ID || "organizations"
-    const deviceCode = isDeviceCodeFlow()
-
-    if (!clientId || (!deviceCode && !clientSecret)) {
-      logger.warn("Missing client credentials for token refresh", { source: "token-repository" })
+    // Step 3: Deserialize cache into the MSAL app
+    try {
+      const tokenCache = msalClient.app.getTokenCache()
+      if (serialized) {
+        tokenCache.deserialize(serialized)
+      }
+    } catch (error) {
+      logger.warn("Failed to deserialize MSAL cache", {
+        source: "token-repository",
+        error: error instanceof Error ? error.message : String(error),
+      })
       return null
     }
 
-    const now = Date.now()
-    const tokenEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`
-
+    // Step 4: Get accounts from cache
+    let accounts
     try {
-      const formData = new URLSearchParams({
-        client_id: clientId,
-        ...(clientSecret ? { client_secret: clientSecret } : {}),
-        refresh_token: refreshToken,
-        grant_type: "refresh_token",
-        scope: "offline_access Tasks.Read Tasks.ReadWrite Tasks.Read.Shared Tasks.ReadWrite.Shared User.Read",
+      accounts = await msalClient.app.getTokenCache().getAllAccounts()
+    } catch (error) {
+      logger.warn("Failed to read accounts from MSAL cache", {
+        source: "token-repository",
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return null
+    }
+
+    if (!accounts || accounts.length === 0) {
+      logger.debug("No accounts found in MSAL cache", { source: "token-repository" })
+      return null
+    }
+
+    // Step 5: Acquire token silently
+    try {
+      const result = await msalClient.app.acquireTokenSilent({
+        account: accounts[0],
+        scopes: [...DELEGATED_SCOPES],
       })
 
-      const response = await fetch(tokenEndpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: formData,
-      })
+      // Step 6: Serialize and save updated cache
+      if (result) {
+        try {
+          const updatedCache = msalClient.app.getTokenCache().serialize()
+          this.cachePersistence.save(updatedCache)
+        } catch (cacheError) {
+          // Non-fatal — token is still valid, just couldn't persist cache update
+          logger.warn("Failed to persist updated MSAL cache", {
+            source: "token-repository",
+            error: cacheError instanceof Error ? cacheError.message : String(cacheError),
+          })
+        }
+      }
 
-      if (!response.ok) {
-        const errorText = await response.text()
-        logger.error(`Token refresh failed: ${errorText}`, { source: "token-repository", status: response.status })
-
-        // Persist failure metadata to token file
-        this.persistRefreshError(`HTTP ${response.status}: ${errorText}`, now)
-
-        this.promptForReauth()
+      // Step 7: Return TokenData
+      if (!result?.accessToken) {
         return null
       }
 
-      const data = await response.json()
-
-      const newTokens: StoredTokenData = {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token || refreshToken,
-        expiresAt: Date.now() + data.expires_in * 1000 - 5 * 60 * 1000, // 5 min buffer
-        isPersonalAccount: this.currentTokens?.isPersonalAccount,
+      return {
+        accessToken: result.accessToken,
+        expiresAt: result.expiresOn?.getTime() ?? Date.now() + 3600_000,
       }
-
-      // Clear any previous error on success
-      if (this.currentTokens) {
-        delete this.currentTokens.lastRefreshError
-        delete this.currentTokens.lastRefreshAttempt
-      }
-
-      // Save the refreshed tokens
-      this.saveTokens(newTokens)
-
-      return newTokens
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      logger.error("Error refreshing token:", { source: "token-repository", error: message })
-
-      // Persist failure metadata to token file
-      this.persistRefreshError(message, now)
-
-      this.promptForReauth()
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logger.warn("MSAL silent token acquisition failed", {
+        source: "token-repository",
+        errorMessage,
+      })
       return null
     }
-  }
-
-  /**
-   * Persist refresh failure metadata alongside existing tokens so that
-   * auth-status can surface the last failure to the user.
-   */
-  private persistRefreshError(errorMessage: string, timestamp: number): void {
-    if (this.currentTokens) {
-      this.currentTokens.lastRefreshError = errorMessage
-      this.currentTokens.lastRefreshAttempt = timestamp
-      try {
-        writeFileSync(this.tokenFilePath, JSON.stringify(this.currentTokens, null, 2), "utf8")
-      } catch (writeError) {
-        logger.error("Failed to persist refresh error:", {
-          source: "token-repository",
-          error: writeError instanceof Error ? writeError.message : String(writeError),
-        })
-      }
-    }
-  }
-
-  saveTokens(tokens: StoredTokenData): void {
-    this.currentTokens = tokens
-    writeFileSync(this.tokenFilePath, JSON.stringify(tokens, null, 2), "utf8")
-  }
-
-  promptForReauth(): void {
-    const toolName = isDeviceCodeFlow() ? "start-device-auth" : "start-auth"
-    const credentialHint = isDeviceCodeFlow() ? "CLIENT_ID" : "CLIENT_ID and CLIENT_SECRET"
-
-    logger.info(
-      "TOKEN REFRESH FAILED - REAUTHENTICATION REQUIRED. " +
-        "Your Microsoft To Do tokens have expired and could not be refreshed. " +
-        `Use the '${toolName}' MCP tool to re-authenticate. ` +
-        (isDeviceCodeFlow()
-          ? "Complete the device code flow in your browser, and your tokens will be refreshed automatically. "
-          : "Complete the authentication in your browser, and your tokens will be refreshed automatically. ") +
-        `Ensure ${credentialHint} is configured. ` +
-        `Token file: ${this.tokenFilePath}`,
-      { source: "token-repository" },
-    )
   }
 }
 

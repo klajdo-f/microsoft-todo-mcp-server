@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 const mockStartServer = vi.fn()
 
-vi.mock("../../src/todo-index.js", () => ({
+vi.mock("../../src/interface/server.js", () => ({
   startServer: (...args: unknown[]) => mockStartServer(...args),
 }))
 

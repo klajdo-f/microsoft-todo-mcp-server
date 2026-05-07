@@ -1,13 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 
 // ---------------------------------------------------------------------------
-// Mock tokenManager before importing graph-client
+// Mock tokenRepository before importing graph-client
 // ---------------------------------------------------------------------------
 
 const mockGetTokens = vi.fn()
 
-vi.mock("../../src/token-manager.js", () => ({
-  tokenManager: {
+vi.mock("../../src/infrastructure/token-repository.js", () => ({
+  tokenRepository: {
     getTokens: (...args: unknown[]) => mockGetTokens(...args),
   },
 }))
@@ -325,7 +325,7 @@ describe("graph-client", () => {
       expect(result).toBe("at-abc")
     })
 
-    it("throws AuthError when tokenManager.getTokens() returns null", async () => {
+    it("throws AuthError when tokenRepository.getTokens() returns null", async () => {
       mockGetTokens.mockResolvedValue(null)
 
       try {
@@ -337,7 +337,7 @@ describe("graph-client", () => {
       }
     })
 
-    it("throws AuthError when tokenManager.getTokens() rejects", async () => {
+    it("throws AuthError when tokenRepository.getTokens() rejects", async () => {
       mockGetTokens.mockRejectedValue(new Error("Token service unavailable"))
 
       try {

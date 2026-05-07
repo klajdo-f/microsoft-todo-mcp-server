@@ -17,7 +17,15 @@ vi.mock("@azure/msal-node", () => ({
     this.acquireTokenByCode = mockAcquireTokenByCode
     this.getTokenCache = mockGetTokenCache
   }),
+  PublicClientApplication: vi.fn(),
   LogLevel: { Warning: 2, Verbose: 3 },
+}))
+
+vi.mock("../../src/infrastructure/cache-persistence.js", () => ({
+  MsalCachePersistence: vi.fn(function (this: any) {
+    this.save = vi.fn()
+    this.load = vi.fn(() => null)
+  }),
 }))
 
 // Import after mocks are in place
@@ -34,11 +42,11 @@ import {
 // ---------------------------------------------------------------------------
 
 function setEnv(env?: Record<string, string | undefined>) {
-  // Clear first
   delete process.env.CLIENT_ID
   delete process.env.CLIENT_SECRET
   delete process.env.TENANT_ID
   delete process.env.REDIRECT_URI
+  delete process.env.AUTH_FLOW
 
   if (env) {
     for (const [k, v] of Object.entries(env)) {
@@ -63,22 +71,15 @@ function makeAuthResult(overrides?: Partial<Record<string, unknown>>) {
     scopes: ["offline_access", "Tasks.Read"],
     account: { username: "user@example.com", localAccountId: "abc", tenantId: "test-tenant" },
     idToken: "id-token",
-    expiresIn: 3600,
     ...overrides,
   }
 }
 
-// Simulate an MSAL cache that contains a refresh token under "RefreshToken"
-function cacheWithRefreshToken(secret = "rt-mocked") {
-  return JSON.stringify({
-    RefreshToken: {
-      "some-cache-key": { secret },
-    },
-  })
-}
-
-function cacheEmpty() {
-  return JSON.stringify({})
+function mockPersistence() {
+  return {
+    save: vi.fn(),
+    load: vi.fn(() => null),
+  } as unknown as import("../../src/infrastructure/cache-persistence.js").MsalCachePersistence
 }
 
 // ---------------------------------------------------------------------------
@@ -137,6 +138,11 @@ describe("oauth-engine", () => {
       const engine = createOAuthEngine()
       expect(engine.redirectUri).toBe("http://localhost:4040/callback")
     })
+
+    it("throws OAuthConfigError when AUTH_FLOW is device_code", () => {
+      setEnv({ ...VALID_ENV, AUTH_FLOW: "device_code" })
+      expect(() => createOAuthEngine()).toThrow(OAuthConfigError)
+    })
   })
 
   // -------------------------------------------------------------------------
@@ -174,27 +180,23 @@ describe("oauth-engine", () => {
   // exchangeAuthCode
   // -------------------------------------------------------------------------
   describe("exchangeAuthCode", () => {
-    it("returns token result compatible with TokenManager.saveTokens()", async () => {
+    it("returns AuthenticationResult with accessToken", async () => {
       mockAcquireTokenByCode.mockResolvedValue(makeAuthResult())
-      mockSerialize.mockResolvedValue(cacheWithRefreshToken())
+      mockSerialize.mockReturnValue("serialized-cache")
 
-      const engine = createOAuthEngine()
+      const persistence = mockPersistence()
+      const engine = createOAuthEngine({ cachePersistence: persistence })
       const result = await engine.exchangeAuthCode("auth-code-123")
 
       expect(result).toHaveProperty("accessToken", "at-mocked")
-      expect(result).toHaveProperty("refreshToken", "rt-mocked")
-      expect(result).toHaveProperty("expiresAt")
-      expect(typeof result.expiresAt).toBe("number")
-      // Expiry should be in the future (with 5-minute buffer subtracted)
-      expect(result.expiresAt).toBeLessThan(Date.now() + 3600 * 1000)
-      expect(result.expiresAt).toBeGreaterThan(Date.now() - 60_000)
     })
 
     it("calls acquireTokenByCode with correct parameters", async () => {
       mockAcquireTokenByCode.mockResolvedValue(makeAuthResult())
-      mockSerialize.mockResolvedValue(cacheWithRefreshToken())
+      mockSerialize.mockReturnValue("cache")
 
-      const engine = createOAuthEngine()
+      const persistence = mockPersistence()
+      const engine = createOAuthEngine({ cachePersistence: persistence })
       await engine.exchangeAuthCode("my-code")
 
       expect(mockAcquireTokenByCode).toHaveBeenCalledWith({
@@ -204,83 +206,32 @@ describe("oauth-engine", () => {
       })
     })
 
-    it("extracts refresh token from RefreshToken cache section", async () => {
+    it("saves serialized cache via persistence.save()", async () => {
       mockAcquireTokenByCode.mockResolvedValue(makeAuthResult())
-      mockSerialize.mockResolvedValue(cacheWithRefreshToken("extracted-rt"))
+      mockSerialize.mockReturnValue("serialized-msal-cache")
 
-      const engine = createOAuthEngine()
-      const result = await engine.exchangeAuthCode("code")
+      const persistence = mockPersistence()
+      const engine = createOAuthEngine({ cachePersistence: persistence })
+      await engine.exchangeAuthCode("code")
 
-      expect(result.refreshToken).toBe("extracted-rt")
+      expect(persistence.save).toHaveBeenCalledWith("serialized-msal-cache")
     })
 
-    it("extracts refresh token from RefreshTokens (plural) cache section", async () => {
-      mockAcquireTokenByCode.mockResolvedValue(makeAuthResult())
-      mockSerialize.mockResolvedValue(
-        JSON.stringify({
-          RefreshTokens: { "key-1": { secret: "plural-rt" } },
-        }),
-      )
+    it("does not call persistence.save() when acquireTokenByCode fails", async () => {
+      mockAcquireTokenByCode.mockRejectedValue(new Error("AADSTS70000"))
 
-      const engine = createOAuthEngine()
-      const result = await engine.exchangeAuthCode("code")
+      const persistence = mockPersistence()
+      const engine = createOAuthEngine({ cachePersistence: persistence })
+      await expect(engine.exchangeAuthCode("bad-code")).rejects.toThrow(OAuthExchangeError)
 
-      expect(result.refreshToken).toBe("plural-rt")
-    })
-
-    it("falls back to scanning cache sections containing 'refresh'", async () => {
-      mockAcquireTokenByCode.mockResolvedValue(makeAuthResult())
-      mockSerialize.mockResolvedValue(
-        JSON.stringify({
-          myRefreshCache: { k: { secret: "fallback-rt" } },
-        }),
-      )
-
-      const engine = createOAuthEngine()
-      const result = await engine.exchangeAuthCode("code")
-
-      expect(result.refreshToken).toBe("fallback-rt")
-    })
-
-    it("returns empty string for refreshToken when not found in cache", async () => {
-      mockAcquireTokenByCode.mockResolvedValue(makeAuthResult())
-      mockSerialize.mockResolvedValue(cacheEmpty())
-
-      const engine = createOAuthEngine()
-      const result = await engine.exchangeAuthCode("code")
-
-      expect(result.refreshToken).toBe("")
-    })
-
-    it("uses custom expiresIn from auth result", async () => {
-      mockAcquireTokenByCode.mockResolvedValue(makeAuthResult({ expiresIn: 7200 }))
-      mockSerialize.mockResolvedValue(cacheWithRefreshToken())
-
-      const engine = createOAuthEngine()
-      const result = await engine.exchangeAuthCode("code")
-
-      // 7200s - 5 min buffer = 6900s
-      expect(result.expiresAt).toBeGreaterThan(Date.now() + 6800 * 1000)
-    })
-
-    it("defaults to 3600s when expiresIn is not present", async () => {
-      mockAcquireTokenByCode.mockResolvedValue(makeAuthResult({ expiresIn: undefined }))
-      mockSerialize.mockResolvedValue(cacheWithRefreshToken())
-
-      const engine = createOAuthEngine()
-      const before = Date.now()
-      const result = await engine.exchangeAuthCode("code")
-      const after = Date.now()
-
-      // Default 3600s - 5 min buffer = ~3300s from test start to end
-      expect(result.expiresAt).toBeGreaterThanOrEqual(before + 3300 * 1000 - 100) // 100ms tolerance
-      expect(result.expiresAt).toBeLessThanOrEqual(after + 3600 * 1000)
+      expect(persistence.save).not.toHaveBeenCalled()
     })
 
     it("throws OAuthExchangeError when acquireTokenByCode fails", async () => {
       mockAcquireTokenByCode.mockRejectedValue(new Error("AADSTS70000: invalid code"))
 
-      const engine = createOAuthEngine()
+      const persistence = mockPersistence()
+      const engine = createOAuthEngine({ cachePersistence: persistence })
       await expect(engine.exchangeAuthCode("bad-code")).rejects.toThrow(OAuthExchangeError)
       await expect(engine.exchangeAuthCode("bad-code")).rejects.toThrow("invalid code")
     })
@@ -289,7 +240,8 @@ describe("oauth-engine", () => {
       const originalError = new Error("AADSTS70000")
       mockAcquireTokenByCode.mockRejectedValue(originalError)
 
-      const engine = createOAuthEngine()
+      const persistence = mockPersistence()
+      const engine = createOAuthEngine({ cachePersistence: persistence })
       try {
         await engine.exchangeAuthCode("code")
         expect.unreachable("Should have thrown")

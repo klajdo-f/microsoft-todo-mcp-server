@@ -13,7 +13,7 @@
  *   - Network / fetch failure → `NetworkError`
  *   - 204 No Content → returns `null` (no JSON parsing attempted)
  */
-import { tokenRepository as tokenManager } from "./token-repository.js"
+import { tokenRepository } from "./token-repository.js"
 import { logger } from "./logger.js"
 import {
   AuthError,
@@ -175,17 +175,17 @@ export async function makeGraphRequest<T>(
 }
 
 /**
- * Authentication helper — delegates to the token manager for token retrieval.
+ * Authentication helper — delegates to the token repository for token retrieval.
  *
  * Throws `AuthError` when no valid tokens are available or when the token
- * manager itself fails.  Callers should catch `AuthError` to prompt
+ * repository itself fails.  Callers should catch `AuthError` to prompt
  * re-authentication.
  */
 export async function getAccessToken(): Promise<string> {
   logger.debug("getAccessToken called", { source: "graph-client" })
 
   try {
-    const tokens = await tokenManager.getTokens()
+    const tokens = await tokenRepository.getTokens()
 
     if (tokens) {
       logger.debug("Successfully retrieved valid token", { source: "graph-client" })

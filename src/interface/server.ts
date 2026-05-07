@@ -56,7 +56,7 @@ export function createMcpServer(): McpServer {
 /**
  * Start the MCP server on stdio.
  *
- * Token management is handled by the TokenManager class; config options
+ * Token management is handled by the TokenRepository; config options
  * are accepted for backward compatibility but are not used.
  */
 export async function startServer(_config?: ServerConfig): Promise<void> {

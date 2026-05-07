@@ -2,15 +2,14 @@
  * Tests for authentication MCP tool handlers.
  *
  * Verifies that:
- * - `auth-status` reads the persisted `isPersonalAccount` flag directly
- *   (no live API call) and surfaces the warning exactly when true.
- * - `start-auth` response text includes a pre-emptive personal-account
- *   limitation note.
+ * - `auth-status` returns clean expiry info without personal-account warnings.
+ * - `start-auth` response text includes the auth URL and instructions.
  * - `start-device-auth` returns user code, verification URI, and message.
  * - Concurrent guard returns existing flow info when called twice.
  * - `DeviceCodeConfigError` produces actionable MCP response mentioning
  *   only CLIENT_ID.
- * - Background promise saves tokens via `tokenManager.saveTokens()`.
+ * - Background promise resolves cleanly after device code completion
+ *   (token persistence is handled by the engine's MSAL cache layer).
  * - `auth-status` unauthenticated message is flow-aware (mentions
  *   start-device-auth + CLIENT_ID for device_code, start-auth + both
  *   credentials for authorization_code).
@@ -22,9 +21,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 // Stable mock references — shared between vi.mock() factories and tests
 // ---------------------------------------------------------------------------
 
-const mockTokenManager = {
+const mockTokenRepository = {
   getTokens: vi.fn(),
-  saveTokens: vi.fn(),
 }
 
 const mockStartAuthFlow = vi.fn()
@@ -35,9 +33,9 @@ const mockCreateDeviceCodeEngine = vi.fn()
 // Top-level mocks
 // ---------------------------------------------------------------------------
 
-vi.mock("../../src/token-manager.js", () => ({
-  get tokenManager() {
-    return mockTokenManager
+vi.mock("../../src/infrastructure/token-repository.js", () => ({
+  get tokenRepository() {
+    return mockTokenRepository
   },
 }))
 
@@ -113,20 +111,13 @@ function getToolHandler(server: McpServer, name: string) {
  * Dynamically import the auth-tools module so module-level state
  * (activeDeviceCodeHandle) and isDeviceCodeFlow() are re-evaluated
  * with the current AUTH_FLOW env var.
- *
- * Returns the registerAuthTools function. Tests should set up mock
- * return values on the stable mock references BEFORE calling this.
  */
 async function importAuthTools() {
-  // Reset module cache so module-level `let activeDeviceCodeHandle = null`
-  // is re-initialised for each test.
   vi.resetModules()
 
-  // Re-register mocks after resetModules using getters that return the
-  // stable references — so tests always work with the same mock objects.
-  vi.doMock("../../src/token-manager.js", () => ({
-    get tokenManager() {
-      return mockTokenManager
+  vi.doMock("../../src/infrastructure/token-repository.js", () => ({
+    get tokenRepository() {
+      return mockTokenRepository
     },
   }))
   vi.doMock("../../src/auth-callback-server.js", () => ({
@@ -186,7 +177,7 @@ async function importAuthTools() {
 }
 
 // ---------------------------------------------------------------------------
-// Tests — authorization_code flow (default)
+// Tests — auth-status
 // ---------------------------------------------------------------------------
 
 describe("auth-status", () => {
@@ -196,52 +187,9 @@ describe("auth-status", () => {
     vi.clearAllMocks()
   })
 
-  it("surfaces warning when isPersonalAccount is true", async () => {
-    mockTokenManager.getTokens.mockResolvedValue({
+  it("returns authenticated text when tokens exist", async () => {
+    mockTokenRepository.getTokens.mockResolvedValue({
       accessToken: "at",
-      refreshToken: "rt",
-      expiresAt: futureDate,
-      isPersonalAccount: true,
-    })
-
-    const server = new McpServer({ name: "test", version: "1.0" })
-    const registerAuthTools = await importAuthTools()
-    registerAuthTools(server)
-
-    const handler = getToolHandler(server, "auth-status")
-    const result = await handler({})
-
-    const text = result.content[0].text
-    expect(text).toContain("Authenticated.")
-    expect(text).toContain("WARNING")
-    expect(text).toContain("personal Microsoft account")
-  })
-
-  it("omits warning when isPersonalAccount is false", async () => {
-    mockTokenManager.getTokens.mockResolvedValue({
-      accessToken: "at",
-      refreshToken: "rt",
-      expiresAt: futureDate,
-      isPersonalAccount: false,
-    })
-
-    const server = new McpServer({ name: "test", version: "1.0" })
-    const registerAuthTools = await importAuthTools()
-    registerAuthTools(server)
-
-    const handler = getToolHandler(server, "auth-status")
-    const result = await handler({})
-
-    const text = result.content[0].text
-    expect(text).toContain("Authenticated.")
-    expect(text).not.toContain("WARNING")
-    expect(text).not.toContain("personal Microsoft account")
-  })
-
-  it("omits warning when isPersonalAccount is missing", async () => {
-    mockTokenManager.getTokens.mockResolvedValue({
-      accessToken: "at",
-      refreshToken: "rt",
       expiresAt: futureDate,
     })
 
@@ -255,11 +203,11 @@ describe("auth-status", () => {
     const text = result.content[0].text
     expect(text).toContain("Authenticated.")
     expect(text).not.toContain("WARNING")
-    expect(text).not.toContain("personal Microsoft account")
+    expect(text).not.toContain("personal")
   })
 
   it("reports not-authenticated when tokens are null (default flow)", async () => {
-    mockTokenManager.getTokens.mockResolvedValue(null)
+    mockTokenRepository.getTokens.mockResolvedValue(null)
 
     const server = new McpServer({ name: "test", version: "1.0" })
     const registerAuthTools = await importAuthTools()
@@ -282,7 +230,7 @@ describe("start-auth", () => {
     vi.clearAllMocks()
   })
 
-  it("response text mentions personal account limitations", async () => {
+  it("returns auth URL and instructions", async () => {
     mockStartAuthFlow.mockResolvedValue({
       authUrl: "https://login.microsoftonline.com/test",
       result: Promise.resolve({ success: true, message: "ok" }),
@@ -296,10 +244,9 @@ describe("start-auth", () => {
     const result = await handler({})
 
     const text = result.content[0].text
-    expect(text).toContain("personal Microsoft account")
-    expect(text).toContain("Outlook.com")
-    expect(text).toContain("Microsoft Graph API")
-    expect(text).toContain("platform restriction")
+    expect(text).toContain("https://login.microsoftonline.com/test")
+    expect(text).toContain("Opening your default browser")
+    expect(text).toContain("auth-status")
   })
 })
 
@@ -380,9 +327,6 @@ describe("start-device-auth", () => {
   })
 
   it("DeviceCodeConfigError returns actionable text mentioning only CLIENT_ID", async () => {
-    // Import DeviceCodeConfigError AFTER importAuthTools() registers the
-    // current mock module — otherwise instanceof won't match the class
-    // the handler uses.
     const server = new McpServer({ name: "test", version: "1.0" })
     const registerAuthTools = await importAuthTools()
     registerAuthTools(server)
@@ -401,13 +345,8 @@ describe("start-device-auth", () => {
     expect(text).not.toContain("CLIENT_SECRET")
   })
 
-  it("background promise saves tokens via tokenManager.saveTokens()", async () => {
-    let resolveResult!: (value: {
-      accessToken: string
-      refreshToken: string
-      expiresAt: number
-      isPersonalAccount: boolean
-    }) => void
+  it("background promise resolves without error after device code completion", async () => {
+    let resolveResult!: (value: unknown) => void
     const resultPromise = new Promise((resolve) => {
       resolveResult = resolve
     })
@@ -432,24 +371,11 @@ describe("start-device-auth", () => {
     const result = await handler({})
     expect(result.content[0].text).toContain("DEV-9999")
 
-    // Simulate device code exchange completion
-    resolveResult({
-      accessToken: "test-access-token",
-      refreshToken: "test-refresh-token",
-      expiresAt: Date.now() + 3600_000,
-      isPersonalAccount: true,
-    })
+    // Simulate device code exchange completion (engine handles persistence)
+    resolveResult({})
 
-    // Allow microtask queue to flush
+    // Allow microtask queue to flush — background promise should resolve cleanly
     await new Promise((r) => setTimeout(r, 10))
-
-    expect(mockTokenManager.saveTokens).toHaveBeenCalledWith(
-      expect.objectContaining({
-        accessToken: "test-access-token",
-        refreshToken: "test-refresh-token",
-        isPersonalAccount: true,
-      }),
-    )
   })
 })
 
@@ -471,7 +397,7 @@ describe("auth-status flow-aware messaging", () => {
 
   it("AUTH_FLOW=device_code unauthenticated message mentions start-device-auth and CLIENT_ID only", async () => {
     process.env.AUTH_FLOW = "device_code"
-    mockTokenManager.getTokens.mockResolvedValue(null)
+    mockTokenRepository.getTokens.mockResolvedValue(null)
 
     const server = new McpServer({ name: "test", version: "1.0" })
     const registerAuthTools = await importAuthTools()
@@ -490,7 +416,7 @@ describe("auth-status flow-aware messaging", () => {
 
   it("default flow unauthenticated message mentions start-auth and both credentials", async () => {
     delete process.env.AUTH_FLOW
-    mockTokenManager.getTokens.mockResolvedValue(null)
+    mockTokenRepository.getTokens.mockResolvedValue(null)
 
     const server = new McpServer({ name: "test", version: "1.0" })
     const registerAuthTools = await importAuthTools()

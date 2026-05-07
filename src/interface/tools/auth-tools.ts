@@ -6,7 +6,7 @@
  * depending on the AUTH_FLOW environment variable.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
-import { tokenRepository as tokenManager } from "../../infrastructure/token-repository.js"
+import { tokenRepository } from "../../infrastructure/token-repository.js"
 import { startAuthFlow } from "../../auth-callback-server.js"
 import { OAuthConfigError } from "../../oauth-engine.js"
 import { createDeviceCodeEngine, DeviceCodeConfigError, DeviceCodeFlowHandle } from "../../device-code-engine.js"
@@ -27,7 +27,7 @@ let activeDeviceCodeHandle: DeviceCodeFlowHandle | null = null
 // ---------------------------------------------------------------------------
 
 async function handleAuthStatus() {
-  const tokens = await tokenManager.getTokens()
+  const tokens = await tokenRepository.getTokens()
 
   if (!tokens) {
     const flowMessage = isDeviceCodeFlow()
@@ -38,8 +38,7 @@ async function handleAuthStatus() {
     }
   }
 
-  const isPersonal = tokens?.isPersonalAccount === true
-  const text = formatAuthStatusText(tokens, isPersonal)
+  const text = formatAuthStatusText(tokens)
   return { content: [{ type: "text" as const, text }] }
 }
 
@@ -88,8 +87,6 @@ async function handleStartAuth() {
             "",
             "After you complete authentication, your tokens will be saved automatically.",
             "You can verify your status with the auth-status tool.",
-            "",
-            "Note: If you authenticate with a personal Microsoft account (Outlook.com, Hotmail.com, Live.com, etc.), Microsoft To Do API access may be unavailable through the Microsoft Graph API. This is a Microsoft platform restriction, not an authentication issue.",
           ].join("\n"),
         },
       ],
@@ -145,26 +142,13 @@ async function handleStartDeviceAuth() {
     const handle = engine.initiateDeviceCodeFlow()
     activeDeviceCodeHandle = handle
 
-    // Background promise: save tokens on success, log on failure, clear handle.
+    // Background promise: log on success/failure, clear handle.
+    // Token persistence is handled by the engine's MSAL cache layer.
     handle.result
-      .then((tokenResult) => {
-        try {
-          tokenManager.saveTokens({
-            accessToken: tokenResult.accessToken,
-            refreshToken: tokenResult.refreshToken,
-            expiresAt: tokenResult.expiresAt,
-            ...(tokenResult.isPersonalAccount ? { isPersonalAccount: true } : {}),
-          })
-          logger.info("[start-device-auth] Tokens saved successfully.", {
-            source: "auth-tools",
-            isPersonalAccount: tokenResult.isPersonalAccount ?? false,
-          })
-        } catch (saveErr: unknown) {
-          logger.error("[start-device-auth] Failed to save tokens.", {
-            source: "auth-tools",
-            error: saveErr instanceof Error ? saveErr.message : String(saveErr),
-          })
-        }
+      .then(() => {
+        logger.info("[start-device-auth] Device code authentication completed successfully.", {
+          source: "auth-tools",
+        })
       })
       .catch((err: unknown) => {
         logger.error("[start-device-auth] Device code exchange failed.", {
@@ -202,8 +186,6 @@ async function handleStartDeviceAuth() {
             "",
             "After you complete authentication, your tokens will be saved automatically.",
             "You can verify your status with the auth-status tool.",
-            "",
-            "Note: If you authenticate with a personal Microsoft account (Outlook.com, Hotmail.com, Live.com, etc.), Microsoft To Do API access may be unavailable through the Microsoft Graph API. This is a Microsoft platform restriction, not an authentication issue.",
           ].join("\n"),
         },
       ],

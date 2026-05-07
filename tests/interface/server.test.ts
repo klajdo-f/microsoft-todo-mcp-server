@@ -15,8 +15,8 @@ vi.mock("../../src/infrastructure/graph-client.js", () => ({
   MS_GRAPH_BASE: "https://graph.microsoft.com/v1.0",
 }))
 
-vi.mock("../../src/token-manager.js", () => ({
-  tokenManager: {
+vi.mock("../../src/infrastructure/token-repository.js", () => ({
+  tokenRepository: {
     getTokens: vi.fn(),
     setTokens: vi.fn(),
     clearTokens: vi.fn(),
