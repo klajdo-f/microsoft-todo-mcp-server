@@ -6,7 +6,7 @@
  * depending on the AUTH_FLOW environment variable.
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
-import { tokenManager } from "../../token-manager.js"
+import { tokenRepository as tokenManager } from "../../infrastructure/token-repository.js"
 import { startAuthFlow } from "../../auth-callback-server.js"
 import { OAuthConfigError } from "../../oauth-engine.js"
 import { createDeviceCodeEngine, DeviceCodeConfigError, DeviceCodeFlowHandle } from "../../device-code-engine.js"

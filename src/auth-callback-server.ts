@@ -8,7 +8,7 @@
  */
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from "http"
 import { createOAuthEngine, type OAuthEngine } from "./oauth-engine.js"
-import { tokenManager, type StoredTokenData } from "./token-manager.js"
+import { tokenRepository as tokenManager } from "./infrastructure/token-repository.js"
 import { logger } from "./infrastructure/logger.js"
 import {
   portFromRedirectUri,

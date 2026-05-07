@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { startServer } from "./todo-index.js"
+import { startServer } from "./interface/server.js"
 import { pathToFileURL } from "url"
 import { logger } from "./infrastructure/logger.js"
 import { getAuthFlow } from "./auth-flow-config.js"

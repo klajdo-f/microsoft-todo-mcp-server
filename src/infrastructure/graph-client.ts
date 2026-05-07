@@ -13,7 +13,7 @@
  *   - Network / fetch failure → `NetworkError`
  *   - 204 No Content → returns `null` (no JSON parsing attempted)
  */
-import { tokenManager } from "../token-manager.js"
+import { tokenRepository as tokenManager } from "./token-repository.js"
 import { logger } from "./logger.js"
 import {
   AuthError,
