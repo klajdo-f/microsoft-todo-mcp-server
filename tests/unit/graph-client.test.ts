@@ -13,7 +13,7 @@ vi.mock("../../src/infrastructure/token-repository.js", () => ({
 }))
 
 // Import after mocks are in place
-import { makeGraphRequest, getAccessToken } from "../../src/graph-client.js"
+import { makeGraphRequest, getAccessToken } from "../../src/infrastructure/graph-client.js"
 import {
   AuthError,
   GraphApiError,

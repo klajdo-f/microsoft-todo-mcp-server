@@ -5,8 +5,8 @@
  * Returns MSAL AuthenticationResult directly; no manual token extraction.
  */
 import { AuthenticationResult } from "@azure/msal-node"
-import { createMsalClient, DELEGATED_SCOPES } from "./infrastructure/msal-client.js"
-import { MsalCachePersistence } from "./infrastructure/cache-persistence.js"
+import { createMsalClient, DELEGATED_SCOPES } from "../../infrastructure/msal-client.js"
+import { MsalCachePersistence } from "../../infrastructure/cache-persistence.js"
 
 export { DELEGATED_SCOPES }
 

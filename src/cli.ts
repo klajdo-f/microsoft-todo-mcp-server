@@ -3,7 +3,7 @@
 import { startServer } from "./interface/server.js"
 import { pathToFileURL } from "url"
 import { logger } from "./infrastructure/logger.js"
-import { getAuthFlow } from "./auth-flow-config.js"
+import { getAuthFlow } from "./interface/auth/auth-flow-config.js"
 
 /**
  * CLI entry point. Validates required environment variables based on the

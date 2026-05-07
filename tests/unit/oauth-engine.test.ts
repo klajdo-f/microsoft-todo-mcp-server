@@ -35,7 +35,7 @@ import {
   OAuthExchangeError,
   DELEGATED_SCOPES,
   type OAuthEngine,
-} from "../../src/oauth-engine.js"
+} from "../../src/interface/auth/oauth-engine.js"
 
 // ---------------------------------------------------------------------------
 // Helpers

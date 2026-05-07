@@ -23,15 +23,15 @@ vi.mock("../../src/infrastructure/token-repository.js", () => ({
   },
 }))
 
-vi.mock("../../src/auth-callback-server.js", () => ({
+vi.mock("../../src/interface/auth/auth-callback-server.js", () => ({
   startAuthFlow: vi.fn(),
 }))
 
-vi.mock("../../src/oauth-engine.js", () => ({
+vi.mock("../../src/interface/auth/oauth-engine.js", () => ({
   OAuthConfigError: class extends Error {},
 }))
 
-vi.mock("../../src/open-browser.js", () => ({
+vi.mock("../../src/infrastructure/open-browser.js", () => ({
   openBrowser: vi.fn(),
 }))
 

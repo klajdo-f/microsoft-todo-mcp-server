@@ -7,14 +7,14 @@
  */
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { tokenRepository } from "../../infrastructure/token-repository.js"
-import { startAuthFlow } from "../../auth-callback-server.js"
-import { OAuthConfigError } from "../../oauth-engine.js"
-import { createDeviceCodeEngine, DeviceCodeConfigError, DeviceCodeFlowHandle } from "../../device-code-engine.js"
-import { openBrowser } from "../../open-browser.js"
+import { startAuthFlow } from "../auth/auth-callback-server.js"
+import { OAuthConfigError } from "../auth/oauth-engine.js"
+import { createDeviceCodeEngine, DeviceCodeConfigError, DeviceCodeFlowHandle } from "../auth/device-code-engine.js"
+import { openBrowser } from "../../infrastructure/open-browser.js"
 import { handleToolError } from "../error-handler.js"
 import { logger } from "../../infrastructure/logger.js"
 import { formatAuthStatusText } from "./auth-helpers.js"
-import { isDeviceCodeFlow } from "../../auth-flow-config.js"
+import { isDeviceCodeFlow } from "../auth/auth-flow-config.js"
 
 // ---------------------------------------------------------------------------
 // Module-level state — concurrent device code flow guard

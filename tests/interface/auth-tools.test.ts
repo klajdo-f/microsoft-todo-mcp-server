@@ -39,7 +39,7 @@ vi.mock("../../src/infrastructure/token-repository.js", () => ({
   },
 }))
 
-vi.mock("../../src/auth-callback-server.js", () => ({
+vi.mock("../../src/interface/auth/auth-callback-server.js", () => ({
   get startAuthFlow() {
     return mockStartAuthFlow
   },
@@ -58,7 +58,7 @@ vi.mock("../../src/infrastructure/logger.js", () => ({
   },
 }))
 
-vi.mock("../../src/oauth-engine.js", () => ({
+vi.mock("../../src/interface/auth/oauth-engine.js", () => ({
   OAuthConfigError: class OAuthConfigError extends Error {
     constructor(message: string) {
       super(message)
@@ -78,7 +78,7 @@ vi.mock("../../src/interface/error-handler.js", () => ({
   })),
 }))
 
-vi.mock("../../src/device-code-engine.js", () => ({
+vi.mock("../../src/interface/auth/device-code-engine.js", () => ({
   get createDeviceCodeEngine() {
     return mockCreateDeviceCodeEngine
   },
@@ -120,12 +120,12 @@ async function importAuthTools() {
       return mockTokenRepository
     },
   }))
-  vi.doMock("../../src/auth-callback-server.js", () => ({
+  vi.doMock("../../src/interface/auth/auth-callback-server.js", () => ({
     get startAuthFlow() {
       return mockStartAuthFlow
     },
   }))
-  vi.doMock("../../src/open-browser.js", () => ({
+  vi.doMock("../../src/infrastructure/open-browser.js", () => ({
     openBrowser: vi.fn(),
   }))
   vi.doMock("../../src/infrastructure/logger.js", () => ({
@@ -136,7 +136,7 @@ async function importAuthTools() {
       debug: vi.fn(),
     },
   }))
-  vi.doMock("../../src/oauth-engine.js", () => ({
+  vi.doMock("../../src/interface/auth/oauth-engine.js", () => ({
     OAuthConfigError: class OAuthConfigError extends Error {
       constructor(message: string) {
         super(message)
@@ -154,7 +154,7 @@ async function importAuthTools() {
       ],
     })),
   }))
-  vi.doMock("../../src/device-code-engine.js", () => ({
+  vi.doMock("../../src/interface/auth/device-code-engine.js", () => ({
     get createDeviceCodeEngine() {
       return mockCreateDeviceCodeEngine
     },
@@ -331,7 +331,7 @@ describe("start-device-auth", () => {
     const registerAuthTools = await importAuthTools()
     registerAuthTools(server)
 
-    const { DeviceCodeConfigError } = await import("../../src/device-code-engine.js")
+    const { DeviceCodeConfigError } = await import("../../src/interface/auth/device-code-engine.js")
     mockCreateDeviceCodeEngine.mockImplementation(() => {
       throw new DeviceCodeConfigError(["CLIENT_ID"])
     })

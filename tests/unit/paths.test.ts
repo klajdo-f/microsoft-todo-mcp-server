@@ -25,7 +25,7 @@ describe("paths", () => {
   // computations pick up the current process.platform / env state.
   // -----------------------------------------------------------------------
   async function importPaths() {
-    return import("../../src/paths.js")
+    return import("../../src/infrastructure/paths.js")
   }
 
   // -----------------------------------------------------------------------

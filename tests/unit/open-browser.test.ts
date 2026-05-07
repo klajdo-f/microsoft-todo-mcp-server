@@ -7,7 +7,7 @@ vi.mock("child_process", () => ({
 }))
 
 // Import after mock is in place
-import { openBrowser } from "../../src/open-browser.js"
+import { openBrowser } from "../../src/infrastructure/open-browser.js"
 
 describe("openBrowser", () => {
   let execMock: ReturnType<typeof vi.fn>

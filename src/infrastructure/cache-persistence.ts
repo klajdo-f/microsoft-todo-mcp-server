@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "fs"
-import { getTokenFilePath } from "../paths.js"
-import { ensureConfigDir } from "../paths.js"
+import { getTokenFilePath } from "./paths.js"
+import { ensureConfigDir } from "./paths.js"
 import { logger } from "./logger.js"
 
 /**

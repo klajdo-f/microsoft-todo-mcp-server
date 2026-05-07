@@ -1,6 +1,6 @@
 import { exec } from "child_process"
 import { promisify } from "util"
-import { logger } from "./infrastructure/logger.js"
+import { logger } from "./logger.js"
 
 const execAsync = promisify(exec)
 

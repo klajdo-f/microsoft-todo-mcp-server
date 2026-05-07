@@ -13,7 +13,7 @@
  */
 import { ConfidentialClientApplication, PublicClientApplication, Configuration, LogLevel } from "@azure/msal-node"
 import { logger } from "./logger.js"
-import { getAuthFlow, type AuthFlow } from "../auth-flow-config.js"
+import { getAuthFlow, type AuthFlow } from "../interface/auth/auth-flow-config.js"
 
 // ---------------------------------------------------------------------------
 // Types & constants

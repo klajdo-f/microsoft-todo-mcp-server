@@ -16,7 +16,7 @@ vi.mock("fs", () => ({
   writeFileSync: (...args: [string, string, string]) => mockWriteFileSync(...args),
 }))
 
-vi.mock("../../src/paths.js", () => ({
+vi.mock("../../src/infrastructure/paths.js", () => ({
   getTokenFilePath: () => mockGetTokenFilePath(),
   ensureConfigDir: () => mockEnsureConfigDir(),
 }))

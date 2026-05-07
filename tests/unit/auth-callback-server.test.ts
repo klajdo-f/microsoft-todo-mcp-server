@@ -9,7 +9,7 @@ import http from "http"
 // after the module under test is imported.
 // ---------------------------------------------------------------------------
 
-vi.mock("../../src/oauth-engine.js", () => ({
+vi.mock("../../src/interface/auth/oauth-engine.js", () => ({
   createOAuthEngine: vi.fn(() => ({
     getAuthUrl: vi.fn().mockResolvedValue("https://login.microsoftonline.com/test/oauth2?code=abc"),
     exchangeAuthCode: vi.fn().mockResolvedValue({
@@ -35,8 +35,8 @@ vi.mock("../../src/oauth-engine.js", () => ({
 }))
 
 // Import after mocks are in place
-import { startAuthFlow } from "../../src/auth-callback-server.js"
-import { createOAuthEngine } from "../../src/oauth-engine.js"
+import { startAuthFlow } from "../../src/interface/auth/auth-callback-server.js"
+import { createOAuthEngine } from "../../src/interface/auth/oauth-engine.js"
 
 // ---------------------------------------------------------------------------
 // Helpers

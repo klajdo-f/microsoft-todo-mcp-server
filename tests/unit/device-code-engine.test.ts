@@ -34,7 +34,7 @@ import {
   DELEGATED_SCOPES,
   type DeviceCodeEngine,
   type DeviceCodeFlowHandle,
-} from "../../src/device-code-engine.js"
+} from "../../src/interface/auth/device-code-engine.js"
 
 // ---------------------------------------------------------------------------
 // Helpers
